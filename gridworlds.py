@@ -31,4 +31,8 @@ def generate_trajectories_world_a(n=1500):
 def generate_trajectories_world_b(n=500):
     pass
 
+def state_features_world_a(state):
+    pass
 
+def state_features_world_b(state):
+    pass

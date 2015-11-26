@@ -2,7 +2,9 @@ import numpy as np
 from gridworlds import *
 
 class IRLModel:
-    def __init__(self, nstates, nactions, nrewards, nfeatures, T, gamma):
+    def __init__(self, nstates, nactions,
+        nrewards, nfeatures, T, gamma, state_features):
+
         self.nstates = nstates
         self.nactions = nactions
         self.nfeatures = nfeatures # num features for state observations
@@ -16,7 +18,8 @@ class IRLModel:
         self.nu = np.ones((1, nstates)) / nstates
         # Probabilities for the initial reward function distribution
         self.sigma = np.ones((1, nrewards)) / nrewards
-
+        # function that returns features for a state
+        self.state_features = state_features
 
     def learn(self, trajectories, tolerance, max_iters):
         """
