@@ -9,6 +9,7 @@ class IRLModel:
         self.nactions = nactions
         self.nfeatures = nfeatures # num features for state observations
         self.T = T # transition model
+        self.Q = np.zeros((nstates, nactions)) # Q-value function (NOT the EM Q fn)
         self.nrewards = nrewards
         self.gamma = gamma
         # Weights for the linear reward functions
@@ -75,6 +76,9 @@ class IRLModel:
         return num / den
 
     def policy(self, rtheta, state, action):
+        """
+        TODO: Implement Q-learning @Karthik
+        """
         return 1.0 / self.nactions
 
     def baum_welch(self):
