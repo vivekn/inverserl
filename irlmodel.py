@@ -31,10 +31,7 @@ class IRLModel:
         """
         self.trajectories = trajectories
 
-        # Initialize data structures
-        self.alpha = [np.zeros((traj.shape)) for traj in trajectories]
-        self.beta = [np.zeros((traj.shape)) for traj in trajectories]
-        self.seq_probs = np.zeros((1, len(trajectories)))
+        self.BWLearn = BaumWelch(trajectories, self)
 
 
 
@@ -45,7 +42,7 @@ class IRLModel:
             (abs(curr_likelihood - last_likelihood) > tolerance)):
             iter = iter + 1
             # Maximize parameters simultaneously
-            self.baum_welch()
+            self.BWLearn.update()
 
             nu = self.maximize_nu()
             sigma = self.maximize_sigma()
@@ -81,79 +78,6 @@ class IRLModel:
         """
         return 1.0 / self.nactions
 
-    def baum_welch(self):
-        """
-        Computes forward and backward probabilities
-        for each trajectory using the current model parameters.
-        """
-
-        ntraj = len(self.alpha)
-
-        for n in xrange(ntraj):
-            traj = self.trajectories[n]
-
-            # alpha recursion
-
-            for r in xrange(self.nrewards):
-                self.alpha[n][(0, r)] = self.sigma[r]
-            tmax = self.alpha[n].shape[0]
-
-            # for t = 1
-            for r in xrange(self.nrewards):
-                for rprev in xrange(self.nrewards):
-                    self.alpha[n][(1, r)] += (self.sigma[traj[(1, 0)]] *
-                        self.tau(r, rprev, traj[(1, 0)]) *
-                        self.policy(r, traj[(1, 0)], traj[(1, 1)]))
-
-            # for t = 2 to n
-            for t in xrange(2, tmax):
-                s = traj[(t, 0)]
-                sprev = traj[(t-1, 0)]
-                a = traj[(t, 1)]
-                aprev = traj[(t-1, 1)]
-                for r in xrange(self.nrewards):
-                    for rprev in xrange(self.nrewards):
-                        self.alpha[n][(t, r)] += (self.T(sprev, aprev, s) *
-                            self.tau(r, rprev, s) *
-                            self.policy(r, s, a) *
-                            self.alpha[n][(t-1, rprev)])
-
-
-            # beta recursion
-            for r in xrange(self.nrewards):
-                self.beta[n][(tmax-1, r)] = 1
-
-            # for t = n-2 to 1
-            for t in xrange(tmax-2, 0, -1):
-                s = traj[(t, 0)]
-                snext = traj[(t+1, 0)]
-                a = traj[(t, 1)]
-                anext = traj[(t+1, 1)]
-                for r in xrange(self.nrewards):
-                    for rnext in xrange(self.nrewards):
-                        self.beta[n][(t, r)] += (self.T(s, a, snext) *
-                            self.tau(rnext, r, snext) *
-                            self.policy(rnext, snext, anext) *
-                            self.beta[n][(t+1, rnext)])
-
-            # for t = 0
-            for r in xrange(self.nrewards):
-                for rnext in xrange(self.nrewards):
-                    self.beta[n][(0, r)] += (self.sigma[traj[(1, 0)]] *
-                        self.tau(r, rnext, traj[(1, 0)]) *
-                        self.policy(r, traj[(1, 0)], traj[(1, 1)]) *
-                        self.beta[n][1, rnext])
-
-            # Compute sequence probabilities
-            self.seq_probs[n] = np.sum(self.alpha[n][tmax, :])
-
-    def ri_given_seq(self, seq, time, rtheta):
-        return (self.alpha[seq][(time, rtheta)] * self.beta[seq][(time, rtheta)] /
-                    self.seq_probs[seq])
-
-
-
-
 
     def maximize_nu(self):
         """
@@ -188,11 +112,34 @@ class IRLModel:
         Returns log likelihood for the training trajectories
         based on the current parameters of the model
         """
-        init_state_prob = np.sum(np.log(self.nu))
-        #TODO Implement Baum Welch algorithm : init_reward_prob =
+        L = 0.0
+        for n, traj in enumerate(self.trajectories):
+            init_state_prob = np.log(self.nu(traj[1, 0]))
+            first_rew_prob = 0.0
+            for r in xrange(self.nrewards):
+                first_rew_prob += (self.BWLearn.ri_given_seq(n, 1, r) *
+                    np.log(self.sigma[r]))
+            policy_prob = 0.0
+            for t in xrange(1, len(traj)):
+                for r in xrange(self.nrewards):
+                    policy_prob += (self.BWLearn.ri_given_seq(n, t, r) *
+                        np.log(self.policy(r, traj[t, 0], traj[t, 1])))
+            reward_transition_prob = 0.0
+            for t in xrange(1, len(traj)):
+                for rprev in xrange(self.nrewards):
+                    for r in xrange(self.nrewards):
+                        reward_transition_prob += (self.BWLearn.ri_given_seq2(
+                            n, t, rprev, r) * np.log(self.tau(rprev, r, state)))
+            transition_prob = 0.0
+            for t in xrange(2, len(traj)):
+                sprev = traj[t-1, 0]
+                aprev = traj[t-1, 1]
+                s = traj[t, 0]
+                transition_prob += np.log(self.T(sprev, aprev, s))
+            L += (init_state_prob + first_rew_prob + policy_prob +
+                    reward_transition_prob + transition_prob)
 
-
-        return 0.0
+        return L
 
     def validate(self, trajectories):
         return sum(self.viterbi_log_likelihood(t) for t in trajectories)
