@@ -25,10 +25,6 @@ class IRLModel:
         # Probabilities for the initial reward function distribution
         self.sigma = np.ones((1, nrewards)) / nrewards
         # function that returns features for a state
-
-        self.states = states
-
-        self.actions = actions
         self.delta = delta
 
         self.state_features = state_features
@@ -92,30 +88,30 @@ class IRLModel:
         TODO: Implement Q-learning @Karthik
         """
 
-        thetaPhi = np.dot(rtheta,state_features[states[traj][time]])
+        thetaPhi = np.dot(rtheta,state_features[traj[time][0]])
 
         bigSum = 0
 
         for s in nstates:
-            transition = self.stateTransition[states[traj][time]][actions[traj][time]][s]
+            transition = self.stateTransition[traj[time][0]][traj[time][1]][s]
             smallSum = 0
             for a in nactions:
                 smallSum+=self.Q(rtheta,s,a)*pi(rtheta,s,a)
             bigSum+=transition*smallSum
 
-        Q(rtheta,states[traj][time],actions[traj][time]) = thetaPhi + self.gamma*bigSum
+        Q(rtheta,traj[time][0],traj[time][1]) = thetaPhi + self.gamma*bigSum
 
         self.Q = Q
 
-        return Q(rthera,states[traj][time],action[traj][time])
+        return Q(rthera,traj[time][0],traj[time[1]])
 
     def pi(self,rtheta,traj,time):
 
-        numerator = np.exp(self.bolztmann*self.Q(rtheta,states[traj][time],actions[traj][time]))
+        numerator = np.exp(self.bolztmann*self.Q(rtheta,traj[time][0],traj[time][1]))
 
         denominator = 0
         for a in nactions:
-            denominator+= np.exp(self.bolztmann*Q(rtheta,states[traj][time],actions[traj][time]))
+            denominator+= np.exp(self.bolztmann*Q(rtheta,traj[time][0],traj[time][1])
 
         return numerator/denominator
 
@@ -180,10 +176,10 @@ class IRLModel:
                     smallSum = 0
                     for t in range(Tn):
                         prob = this.BWLearn.ri_given_seq(traj,t,theta[r])
-                        dQ = np.sum(self.state_features[states[traj][t]])
-                        dPi = np.exp(self.bolztmann*Q(states[traj][t],actions[traj][t]))*self.bolztmann*dQ
+                        dQ = np.sum(self.state_features[traj[t][0]])
+                        dPi = np.exp(self.bolztmann*Q(traj[t][0],traj[t][1]))*self.bolztmann*dQ
                         for aprime in nactions:
-                            sumAct+=np.exp(self.bolztmann*Q(states[traj][t],aprime))*self.bolztmann
+                            sumAct+=np.exp(self.bolztmann*Q(traj[t][0],aprime))*self.bolztmann
                         dPi = dPi/sumAct
                         Pi = pi(theta[r],traj,t)
                         smallSum+= prob*dPi/Pi
