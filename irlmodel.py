@@ -5,12 +5,13 @@ import scipy.constants as C
 
 class IRLModel:
     def __init__(self, nstates, nactions,
-        nrewards, nfeatures, T, gamma, state_features):
+        nrewards, nfeatures, T, stateTransition, gamma, delta, state_features):
 
         self.nstates = nstates
         self.nactions = nactions
         self.nfeatures = nfeatures # num features for state observations
         self.T = T # transition model
+        self.stateTransition = stateTransition
         self.Q = np.zeros([nrewards,nstates, nactions]) # Q-value function (NOT the EM Q fn)
         self.nrewards = nrewards
         self.gamma = gamma
@@ -28,6 +29,7 @@ class IRLModel:
         self.states = states
 
         self.actions = actions
+        self.delta = delta
 
         self.state_features = state_features
         self.initial_state_prob =  collections.defaultdict(int)
@@ -67,11 +69,11 @@ class IRLModel:
             last_likelihood = curr_likelihood
             curr_likelihood = self.training_log_likelihood()
 
-    def tau(self, rtheta1, rtheta2, state):
+    def tau(self, rtheta1, rtheta2, traj,time):
         """
         Transition function between reward functions.
         """
-        state = self.state_features(state)
+        state = self.states[traj][time]
         num = 0.0
         if rtheta1 == rtheta2:
             num = 1
@@ -95,7 +97,7 @@ class IRLModel:
         bigSum = 0
 
         for s in nstates:
-            transition = T[states[traj][time]][actions[traj][time]][s]
+            transition = self.stateTransition[states[traj][time]][actions[traj][time]][s]
             smallSum = 0
             for a in nactions:
                 smallSum+=self.Q(rtheta,s,a)*pi(rtheta,s,a)
@@ -189,13 +191,21 @@ class IRLModel:
                 currThetaCoordinate = lastThetaCoordinate + self.delta*bigSum
 
             theta[r] = currThetaCoordinate
+        self.Theta = theta
+        return theta
 
     def maximize_reward_transitions(self):
         """
         TODO: Find the optimal set of weights for the reward transitions
         @ Daniel
         """
-        pass
+
+
+
+
+
+
+        
 
     def training_log_likelihood(self):
         """
