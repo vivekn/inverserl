@@ -29,6 +29,7 @@ class BaumWelch(object):
         for n in xrange(ntraj):
             traj = self.trajectories[n]
 
+
             # alpha recursion
 
             for r in xrange(model.nrewards):

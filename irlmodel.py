@@ -1,5 +1,7 @@
 import numpy as np
 from gridworlds import *
+import collections
+import scipy.constants as C
 
 class IRLModel:
     def __init__(self, nstates, nactions,
@@ -9,9 +11,10 @@ class IRLModel:
         self.nactions = nactions
         self.nfeatures = nfeatures # num features for state observations
         self.T = T # transition model
-        self.Q = np.zeros((nstates, nactions)) # Q-value function (NOT the EM Q fn)
+        self.Q = np.zeros([nrewards,nstates, nactions]) # Q-value function (NOT the EM Q fn)
         self.nrewards = nrewards
         self.gamma = gamma
+        self.bolztmann = C.k
         # Weights for the linear reward functions
         self.Theta = np.random.rand(nrewards, nfeatures)
         # Weights for the reward transition functions
@@ -21,7 +24,13 @@ class IRLModel:
         # Probabilities for the initial reward function distribution
         self.sigma = np.ones((1, nrewards)) / nrewards
         # function that returns features for a state
+
+        self.states = states
+
+        self.actions = actions
+
         self.state_features = state_features
+        self.initial_state_prob =  collections.defaultdict(int)
 
     def learn(self, trajectories, tolerance, max_iters):
         """
@@ -30,9 +39,13 @@ class IRLModel:
         the first time step should be a dummy (state, action) pair
         """
         self.trajectories = trajectories
+        self.ntrajectories = len(trajectories)
 
         self.BWLearn = BaumWelch(trajectories, self)
 
+        self.max_iters = max_iters
+
+        self.tolerance = tolerance
 
 
         curr_likelihood = self.training_log_likelihood()
@@ -72,11 +85,38 @@ class IRLModel:
             (np.exp(np.dot(self.omega[rtheta1], state))) - selftransition) + 1
         return num / den
 
-    def policy(self, rtheta, state, action):
+    def policy(self, rtheta, traj, time):
         """
         TODO: Implement Q-learning @Karthik
         """
-        return 1.0 / self.nactions
+
+        thetaPhi = np.dot(rtheta,state_features[states[traj][time]])
+
+        bigSum = 0
+
+        for s in nstates:
+            transition = T[states[traj][time]][actions[traj][time]][s]
+            smallSum = 0
+            for a in nactions:
+                smallSum+=self.Q(rtheta,s,a)*pi(rtheta,s,a)
+            bigSum+=transition*smallSum
+
+        Q(rtheta,states[traj][time],actions[traj][time]) = thetaPhi + self.gamma*bigSum
+
+        self.Q = Q
+
+        return Q(rthera,states[traj][time],action[traj][time])
+
+    def pi(self,rtheta,traj,time):
+
+        numerator = np.exp(self.bolztmann*self.Q(rtheta,states[traj][time],actions[traj][time]))
+
+        denominator = 0
+        for a in nactions:
+            denominator+= np.exp(self.bolztmann*Q(rtheta,states[traj][time],actions[traj][time]))
+
+        return numerator/denominator
+
 
 
     def maximize_nu(self):
@@ -84,21 +124,71 @@ class IRLModel:
         TODO: Maximize the initial state probabilities according to expert trajectories
         @ Daniel/Karthik
         """
-        pass
+        nstates = self.nstates
+        trajectories = self.trajectories
+        ntrajectories = self.ntrajectories
+        nu = collections.defaultdict(int)
+        for s in nstates:
+            for j in trajectories:
+                if j[0][0]= s:
+                    nu[s]+=1/ntrajectories
+
+        return nu
+
 
     def maximize_sigma(self):
         """
         TODO: Maximize the initial reward function probabilities according to expert trajectories
         @ Daniel/Karthik
         """
-        pass
+        sigma = collections.defaultdict()
+
+        curr_prob = 0
+        probSum = 0
+        
+        for r in nrewards:
+            for traj in self.trajectories:
+                probSum+=this.BWLearn.ri_given_seq(traj,0,theta[r])
+
+            curr_prob = probSum/ntrajectories
+
+            sigma[s] = curr_prob
+
+        return sigma
+        
 
     def maximize_reward_weights(self):
         """
         TODO: Find the optimal set of weights for the reward functions using gradient ascent
         @ Karthik
         """
-        pass
+
+        theta = self.Theta
+
+        currThetaCoordinate = 1 #what are good values for initial thetas?
+        lastThetaCoordinate = 0
+
+        for r in nrewards:
+            bigSum = 0
+            while (iter < max_iters and (abs(currThetaCoordinate-lastThetaCoordinate) > tolerance)):
+                iter = iter + 1
+                lastThetaCoordinate = currThetaCoordinate
+                for traj in range(len(self.trajectories)):
+                    Tn = len(self.trajectories[traj])
+                    smallSum = 0
+                    for t in range(Tn):
+                        prob = this.BWLearn.ri_given_seq(traj,t,theta[r])
+                        dQ = np.sum(self.state_features[states[traj][t]])
+                        dPi = np.exp(self.bolztmann*Q(states[traj][t],actions[traj][t]))*self.bolztmann*dQ
+                        for aprime in nactions:
+                            sumAct+=np.exp(self.bolztmann*Q(states[traj][t],aprime))*self.bolztmann
+                        dPi = dPi/sumAct
+                        Pi = pi(theta[r],traj,t)
+                        smallSum+= prob*dPi/Pi
+                    bigSum+=smallSum
+                currThetaCoordinate = lastThetaCoordinate + self.delta*bigSum
+
+            theta[r] = currThetaCoordinate
 
     def maximize_reward_transitions(self):
         """
