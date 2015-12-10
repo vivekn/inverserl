@@ -50,18 +50,20 @@ class IRLModel:
         curr_likelihood = self.training_log_likelihood()
         last_likelihood = curr_likelihood - 1e9
         iter = 0
+
+        self.nu = self.maximize_nu()
+
         while (iter < max_iters and
             (abs(curr_likelihood - last_likelihood) > tolerance)):
             iter = iter + 1
             # Maximize parameters simultaneously
             self.BWLearn.update()
 
-            nu = self.maximize_nu()
             sigma = self.maximize_sigma()
             Theta = self.maximize_reward_weights()
             omega = self.maximize_reward_transitions()
             # Set parameters
-            self.nu, self.sigma, self.Theta, self.omega = nu, sigma, Theta, omega
+            self.sigma, self.Theta, self.omega = sigma, Theta, omega
             # Compute likelihoods
             last_likelihood = curr_likelihood
             curr_likelihood = self.training_log_likelihood()
@@ -99,27 +101,25 @@ class IRLModel:
 
     def maximize_nu(self):
         """
-        TODO: Maximize the initial state probabilities according to expert trajectories
-        @ Daniel/Karthik
+        Maximize the initial state probabilities according to expert trajectories
         """
         nstates = self.nstates
         trajectories = self.trajectories
         ntrajectories = self.ntrajectories
-        nu = collections.defaultdict(int)
-        for s in nstates:
+        nu = np.zeros(nstates)
+        for s in xrange(nstates):
             for j in trajectories:
-                if j[0][0] == s:
-                    nu[s]+=1/ntrajectories
+                if j[1][0] == s:
+                    nu[s]+=1.0/ntrajectories
 
         return nu
 
 
     def maximize_sigma(self):
         """
-        TODO: Maximize the initial reward function probabilities according to expert trajectories
-        @ Daniel/Karthik
+        Maximize the initial reward function probabilities according to expert trajectories
         """
-        sigma = collections.defaultdict()
+        sigma = np.zeros(self.nstates)
 
         curr_prob = 0
         probSum = 0
@@ -130,7 +130,7 @@ class IRLModel:
 
             curr_prob = probSum/len(self.trajectories)
 
-            sigma[s] = curr_prob
+            sigma[r] = curr_prob
 
         return sigma
 
@@ -218,12 +218,6 @@ class IRLModel:
         TODO: Find the optimal set of weights for the reward transitions
         @ Daniel
         """
-
-
-
-
-
-
 
 
     def training_log_likelihood(self):
