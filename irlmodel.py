@@ -1,10 +1,11 @@
 import numpy as np
-from gridworlds import *
 import collections
+from baum_welch import BaumWelch
 
 class IRLModel:
     def __init__(self, nstates, nactions,
-        nrewards, nfeatures, T, stateTransition, gamma, delta, state_features):
+        nrewards, nfeatures, T, stateTransition, gamma, delta, state_features,
+        dynamic_features):
 
         self.nstates = nstates
         self.nactions = nactions
@@ -27,6 +28,7 @@ class IRLModel:
         self.delta = delta
 
         self.state_features = state_features
+        self.dynamic_features = dynamic_features
         self.initial_state_prob =  collections.defaultdict(int)
 
         #Initialize policy
@@ -42,14 +44,9 @@ class IRLModel:
         """
         self.trajectories = trajectories
         self.ntrajectories = len(trajectories)
-
         self.BWLearn = BaumWelch(trajectories, self)
-
         self.max_iters = max_iters
-
         self.tolerance = tolerance
-
-
         curr_likelihood = self.training_log_likelihood()
         last_likelihood = curr_likelihood - 1e9
         iter = 0
@@ -69,11 +66,12 @@ class IRLModel:
             last_likelihood = curr_likelihood
             curr_likelihood = self.training_log_likelihood()
 
-    def tau(self, rtheta1, rtheta2, traj,time):
+    def tau(self, rtheta1, rtheta2, s):
         """
         Transition function between reward functions.
         """
-        state = self.states[traj][time]
+
+        state = self.dynamic_features[s]
         num = 0.0
         if rtheta1 == rtheta2:
             num = 1
@@ -87,37 +85,15 @@ class IRLModel:
             (np.exp(np.dot(self.omega[rtheta1], state))) - selftransition) + 1
         return num / den
 
-    """
-    def policy(self, rtheta, traj, time):
-        #TODO: Implement Q-learning @Karthik
-
-        thetaPhi = np.dot(rtheta,state_features[traj[time][0]])
-
-        bigSum = 0
-
-        for s in nstates:
-            transition = self.stateTransition[traj[time][0]][traj[time][1]][s]
-            smallSum = 0
-            for a in nactions:
-                smallSum+=self.Q(rtheta,s,a)*pi(rtheta,s,a)
-            bigSum+=transition*smallSum
-
-        Q[rtheta,traj[time][0],traj[time][1]) = thetaPhi + self.gamma*bigSum
-
-        self.Q = Q
-
-        return Q(rthera,traj[time][0],traj[time[1]])
-
     def pi(self,rtheta,traj,time):
 
         numerator = np.exp(self.boltzmann*self.Q(rtheta,traj[time][0],traj[time][1]))
 
         denominator = 0
-        for a in nactions:
-            denominator+= np.exp(self.boltzmann*Q(rtheta,traj[time][0],traj[time][1]))
+        for a in self.nactions:
+            denominator+= np.exp(self.boltzmann*self.Q(rtheta,traj[time][0],traj[time][1]))
 
         return numerator/denominator
-    """
 
 
 
@@ -148,11 +124,11 @@ class IRLModel:
         curr_prob = 0
         probSum = 0
 
-        for r in nrewards:
+        for r in self.nrewards:
             for traj in self.trajectories:
-                probSum+=this.BWLearn.ri_given_seq(traj,0,theta[r])
+                probSum+=self.BWLearn.ri_given_seq(traj,0,self.Theta[r])
 
-            curr_prob = probSum/ntrajectories
+            curr_prob = probSum/len(self.trajectories)
 
             sigma[s] = curr_prob
 
@@ -177,7 +153,7 @@ class IRLModel:
                 # Q learning
                 pi, gradPi = self.gradient_pi(r)
                 policy[r] = pi
-                gradTheta = np.zeros(nfeatures)
+                gradTheta = np.zeros(self.nfeatures)
                 for n, traj in enumerate(self.trajectories):
                     Tn = len(traj)
                     for t in xrange(1, Tn):
@@ -268,7 +244,8 @@ class IRLModel:
                     policy_prob += (self.BWLearn.ri_given_seq(n, t, r) *
                         np.log(self.policy[r, traj[t, 0], traj[t, 1]]))
             reward_transition_prob = 0.0
-            for t in xrange(1, len(traj)):
+            for t in xrange(2, len(traj)):
+                state = traj[t-1, 0]
                 for rprev in xrange(self.nrewards):
                     for r in xrange(self.nrewards):
                         reward_transition_prob += (self.BWLearn.ri_given_seq2(
@@ -278,7 +255,7 @@ class IRLModel:
                 sprev = traj[t-1, 0]
                 aprev = traj[t-1, 1]
                 s = traj[t, 0]
-                transition_prob += np.log(self.T(sprev, aprev, s))
+                transition_prob += np.log(self.T[sprev, aprev, s])
             L += (init_state_prob + first_rew_prob + policy_prob +
                     reward_transition_prob + transition_prob)
 

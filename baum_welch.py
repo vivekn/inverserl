@@ -51,7 +51,7 @@ class BaumWelch(object):
                 aprev = traj[(t-1, 1)]
                 for r in xrange(model.nrewards):
                     for rprev in xrange(model.nrewards):
-                        self.alpha[n][(t, r)] += (model.T(sprev, aprev, s) *
+                        self.alpha[n][(t, r)] += (model.T[sprev, aprev, s] *
                             model.tau(r, rprev, s) *
                             model.policy[r, s, a] *
                             self.alpha[n][(t-1, rprev)])
@@ -69,7 +69,7 @@ class BaumWelch(object):
                 anext = traj[(t+1, 1)]
                 for r in xrange(model.nrewards):
                     for rnext in xrange(model.nrewards):
-                        self.beta[n][(t, r)] += (model.T(s, a, snext) *
+                        self.beta[n][(t, r)] += (model.T[s, a, snext] *
                             model.tau(rnext, r, snext) *
                             model.policy[rnext, snext, anext] *
                             self.beta[n][(t+1, rnext)])
@@ -107,7 +107,7 @@ class BaumWelch(object):
 
         return (self.alpha[seq][(time-1, rthetaprev)] *
                 self.beta[seq][(time, rtheta)] *
-                model.T(sprev, aprev, s) * model.tau(rthetaprev, rtheta, s) *
+                model.T[sprev, aprev, s] * model.tau(rthetaprev, rtheta, s) *
                 model.policy[rtheta, s, a] / self.seq_probs[seq])
 
 
