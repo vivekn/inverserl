@@ -1,7 +1,6 @@
 import numpy as np
 from gridworlds import *
 import collections
-import scipy.constants as C
 
 class IRLModel:
     def __init__(self, nstates, nactions,
@@ -15,7 +14,7 @@ class IRLModel:
         self.Q = np.zeros([nrewards,nstates, nactions]) # Q-value function (NOT the EM Q fn)
         self.nrewards = nrewards
         self.gamma = gamma
-        self.bolztmann = C.k
+        self.boltzmann = 0.5
         # Weights for the linear reward functions
         self.Theta = np.random.rand(nrewards, nfeatures)
         # Weights for the reward transition functions
@@ -29,6 +28,11 @@ class IRLModel:
 
         self.state_features = state_features
         self.initial_state_prob =  collections.defaultdict(int)
+
+        #Initialize policy
+        self.policy = np.zeros(nrewards, nstates, nactions)
+        for r in xrange(nrewards):
+            self.policy[r], _ = self.gradient_pi(r)
 
     def learn(self, trajectories, tolerance, max_iters):
         """
@@ -83,10 +87,9 @@ class IRLModel:
             (np.exp(np.dot(self.omega[rtheta1], state))) - selftransition) + 1
         return num / den
 
+    """
     def policy(self, rtheta, traj, time):
-        """
-        TODO: Implement Q-learning @Karthik
-        """
+        #TODO: Implement Q-learning @Karthik
 
         thetaPhi = np.dot(rtheta,state_features[traj[time][0]])
 
@@ -99,7 +102,7 @@ class IRLModel:
                 smallSum+=self.Q(rtheta,s,a)*pi(rtheta,s,a)
             bigSum+=transition*smallSum
 
-        Q(rtheta,traj[time][0],traj[time][1]) = thetaPhi + self.gamma*bigSum
+        Q[rtheta,traj[time][0],traj[time][1]) = thetaPhi + self.gamma*bigSum
 
         self.Q = Q
 
@@ -107,13 +110,14 @@ class IRLModel:
 
     def pi(self,rtheta,traj,time):
 
-        numerator = np.exp(self.bolztmann*self.Q(rtheta,traj[time][0],traj[time][1]))
+        numerator = np.exp(self.boltzmann*self.Q(rtheta,traj[time][0],traj[time][1]))
 
         denominator = 0
         for a in nactions:
-            denominator+= np.exp(self.bolztmann*Q(rtheta,traj[time][0],traj[time][1])
+            denominator+= np.exp(self.boltzmann*Q(rtheta,traj[time][0],traj[time][1]))
 
         return numerator/denominator
+    """
 
 
 
@@ -128,7 +132,7 @@ class IRLModel:
         nu = collections.defaultdict(int)
         for s in nstates:
             for j in trajectories:
-                if j[0][0]= s:
+                if j[0][0] == s:
                     nu[s]+=1/ntrajectories
 
         return nu
@@ -143,7 +147,7 @@ class IRLModel:
 
         curr_prob = 0
         probSum = 0
-        
+
         for r in nrewards:
             for traj in self.trajectories:
                 probSum+=this.BWLearn.ri_given_seq(traj,0,theta[r])
@@ -153,42 +157,85 @@ class IRLModel:
             sigma[s] = curr_prob
 
         return sigma
-        
 
-    def maximize_reward_weights(self):
+
+    def maximize_reward_weights(self, max_iters=100, tolerance = 0.01):
         """
-        TODO: Find the optimal set of weights for the reward functions using gradient ascent
-        @ Karthik
+        Find the optimal set of weights for the reward functions using gradient ascent
         """
+        curr_magnitude = 0
+        last_magnitude = 1e9
+        iter = 0
+        Theta = np.copy(self.Theta)
+        policy = np.zeros(self.nrewards, self.nstates, self.nactions)
 
-        theta = self.Theta
+        while (iter < max_iters and
+            (abs(curr_magnitude - last_magnitude) > tolerance)):
+            iter = iter + 1
 
-        currThetaCoordinate = 1 #what are good values for initial thetas?
-        lastThetaCoordinate = 0
+            for r in xrange(self.nrewards):
+                # Q learning
+                pi, gradPi = self.gradient_pi(r)
+                policy[r] = pi
+                gradTheta = np.zeros(nfeatures)
+                for n, traj in enumerate(self.trajectories):
+                    Tn = len(traj)
+                    for t in xrange(1, Tn):
+                        s = traj[t, 0]
+                        a = traj[t, 1]
+                        prob = self.BWLearn.ri_given_seq(n, t, r)
+                        gradTheta += prob * gradPi[s, a] / pi[s, a]
 
-        for r in nrewards:
-            bigSum = 0
-            while (iter < max_iters and (abs(currThetaCoordinate-lastThetaCoordinate) > tolerance)):
-                iter = iter + 1
-                lastThetaCoordinate = currThetaCoordinate
-                for traj in range(len(self.trajectories)):
-                    Tn = len(self.trajectories[traj])
-                    smallSum = 0
-                    for t in range(Tn):
-                        prob = this.BWLearn.ri_given_seq(traj,t,theta[r])
-                        dQ = np.sum(self.state_features[traj[t][0]])
-                        dPi = np.exp(self.bolztmann*Q(traj[t][0],traj[t][1]))*self.bolztmann*dQ
-                        for aprime in nactions:
-                            sumAct+=np.exp(self.bolztmann*Q(traj[t][0],aprime))*self.bolztmann
-                        dPi = dPi/sumAct
-                        Pi = pi(theta[r],traj,t)
-                        smallSum+= prob*dPi/Pi
-                    bigSum+=smallSum
-                currThetaCoordinate = lastThetaCoordinate + self.delta*bigSum
+                # Set parameters
+                Theta[r] = Theta[r] + self.delta * gradTheta
 
-            theta[r] = currThetaCoordinate
-        self.Theta = theta
-        return theta
+            # Compute magnitudes
+            last_magnitude = curr_magnitude
+            curr_magnitude = np.sum(np.abs(Theta))
+        self.policy = policy
+
+
+
+    def gradient_pi(self, rtheta, iters=100):
+        """
+        Returns pi(s, a) matrix for reward function rtheta.
+        Also returns the gradient of pi, uses a Q learning like
+        method to compute the gradient.
+        """
+        pi = np.zeros((self.nstates, self.nactions))
+        gradPi = np.zeros((self.nstates, self.nactions, self.nfeatures))
+
+        # Initialize values
+        V = np.dot(self.state_features, self.Theta[rtheta])
+        Q = np.tile(V, self.nactions)
+        gradV = np.copy(self.state_features)
+        gradZ = np.zeros(self.nstates, self.nfeatures)
+
+        for iter in xrange(iters):
+            Q = (np.tile(np.dot(self.state_features, self.Theta[rtheta]), self.nactions) +
+                    self.gamma * np.tensordot(self.T, V))
+            #gradQ s*f*a tensor
+            gradQ = (np.swapaxes(np.tile(self.state_features, self.nactions), 1, 2)
+                        + self.gamma * np.tensordot(self.T, self.state_features))
+
+            Z = np.sum(np.exp(self.boltzmann * Q), 1)
+            for s in xrange(self.nstates):
+                gradZ[s] = self.boltzmann * np.dot(np.exp(self.boltzmann * Q[s]), gradQ[s])
+
+            for s in xrange(self.nstates):
+                pi[s] = np.exp(self.boltzmann * Q[s]) / Z[s]
+
+            for s in xrange(self.nstates):
+                for a in xrange(self.nactions):
+                    temp = np.exp(self.boltzmann*Q[s, a])
+                    gradPi[s, a] = (self.boltzmann * Z[s] * temp * gradQ[s, a] - temp * gradZ[s]) / (Z[s] ** 2)
+
+            V = pi * Q
+            for s in xrange(self.nstates):
+                gradV[s] = np.dot(Q[s], gradPi[s, a]) + np.dot(pi[s], gradQ[s, a])
+
+        return (pi, gradPi)
+
 
     def maximize_reward_transitions(self):
         """
@@ -201,7 +248,7 @@ class IRLModel:
 
 
 
-        
+
 
     def training_log_likelihood(self):
         """
@@ -219,7 +266,7 @@ class IRLModel:
             for t in xrange(1, len(traj)):
                 for r in xrange(self.nrewards):
                     policy_prob += (self.BWLearn.ri_given_seq(n, t, r) *
-                        np.log(self.policy(r, traj[t, 0], traj[t, 1])))
+                        np.log(self.policy[r, traj[t, 0], traj[t, 1]]))
             reward_transition_prob = 0.0
             for t in xrange(1, len(traj)):
                 for rprev in xrange(self.nrewards):
