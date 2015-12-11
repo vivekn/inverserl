@@ -1,11 +1,12 @@
 import numpy as np
 import collections
 from baum_welch import BaumWelch
+from numba import jit
 
 class IRLModel:
     def __init__(self, nstates, nactions,
         nrewards, nfeatures, T, stateTransition, gamma, delta, state_features,
-        dynamic_features):
+        dynamic_features=None):
 
         self.nstates = nstates
         self.nactions = nactions
@@ -27,8 +28,15 @@ class IRLModel:
         # function that returns features for a state
         self.delta = delta
 
+        self.tau = np.zeros(self.nrewards, self.nrewards, self.nstates)
+
         self.state_features = state_features
         self.dynamic_features = dynamic_features
+        if dynamic_features:
+            self.ndynfeatures = dynamic_features.shape[1]
+        else:
+            self.ndynfeatures = 0
+
         self.initial_state_prob =  collections.defaultdict(int)
 
         #Initialize policy
@@ -57,18 +65,26 @@ class IRLModel:
             (abs(curr_likelihood - last_likelihood) > tolerance)):
             iter = iter + 1
             # Maximize parameters simultaneously
+            omega = None
             self.BWLearn.update()
+            if self.ndynfeatures > 0:
+                self.precompute_tau_dynamic()
+                omega = self.maximize_reward_transitions()
 
             sigma = self.maximize_sigma()
             Theta = self.maximize_reward_weights()
-            omega = self.maximize_reward_transitions()
+            if self.ndynfeatures == 0:
+                self.precompute_tau_static()
+
             # Set parameters
-            self.sigma, self.Theta, self.omega = sigma, Theta, omega
+            self.sigma, self.Theta = sigma, Theta
+            if omega:
+                self.omega = omega
             # Compute likelihoods
             last_likelihood = curr_likelihood
             curr_likelihood = self.training_log_likelihood()
 
-    def tau(self, rtheta1, rtheta2, s):
+    def tau_helper(self, rtheta1, rtheta2, s):
         """
         Transition function between reward functions.
         """
@@ -86,6 +102,33 @@ class IRLModel:
         den = (np.sum
             (np.exp(np.dot(self.omega[rtheta1], state))) - selftransition) + 1
         return num / den
+
+    def precompute_tau_dynamic(self):
+        for s in xrange(self.nstates):
+            for r1 in xrange(self.nrewards):
+                for r2 in xrange(self.nrewards):
+                    self.tau[r1, r2, s] = self.tau_helper(r1, r2, s)
+
+    @jit
+    def precompute_tau_static(self):
+        """
+        This is very slow, need to optimize it
+        """
+        for s in xrange(self.nstates):
+            for r1 in xrange(self.nrewards):
+                for r2 in xrange(self.nrewards):
+                    numerator = 0
+                    denominator = 0
+                    for n in xrange(len(self.trajectories)):
+                        Tn = len(self.trajectories[n])
+                        for t in xrange(1, Tn):
+                            numerator += self.BWLearn.ri_given_seq2(n, t, r1, r2)
+                    for r3 in xrange(self.nrewards):
+                        for n in xrange(len(self.trajectories)):
+                            Tn = len(self.trajectories[n])
+                            for t in xrange(1, Tn):
+                                denominator += self.BWLearn.ri_given_seq2(n, t, r1, r3)
+                    self.tau[r1, r2, s] = numerator / denominator
 
     def pi(self,rtheta,traj,time):
 

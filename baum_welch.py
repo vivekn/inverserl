@@ -1,4 +1,5 @@
 import numpy as np
+from numba import jit
 
 class BaumWelch(object):
     """
@@ -17,6 +18,7 @@ class BaumWelch(object):
         self.beta = [np.zeros((traj.shape)) for traj in trajectories]
         self.seq_probs = np.zeros((1, len(trajectories)))
 
+    @jit
     def update(self):
         """
         Computes forward and backward probabilities
@@ -40,7 +42,7 @@ class BaumWelch(object):
             for r in xrange(model.nrewards):
                 for rprev in xrange(model.nrewards):
                     self.alpha[n][(1, r)] += (model.sigma[traj[(1, 0)]] *
-                        model.tau(r, rprev, traj[(1, 0)]) *
+                        model.tau[r, rprev, traj[(1, 0)]] *
                         model.policy[r, traj[(1, 0)], traj[(1, 1)]])
 
             # for t = 2 to n
@@ -52,7 +54,7 @@ class BaumWelch(object):
                 for r in xrange(model.nrewards):
                     for rprev in xrange(model.nrewards):
                         self.alpha[n][(t, r)] += (model.T[sprev, aprev, s] *
-                            model.tau(r, rprev, s) *
+                            model.tau[r, rprev, s] *
                             model.policy[r, s, a] *
                             self.alpha[n][(t-1, rprev)])
 
@@ -70,7 +72,7 @@ class BaumWelch(object):
                 for r in xrange(model.nrewards):
                     for rnext in xrange(model.nrewards):
                         self.beta[n][(t, r)] += (model.T[s, a, snext] *
-                            model.tau(rnext, r, snext) *
+                            model.tau[rnext, r, snext] *
                             model.policy[rnext, snext, anext] *
                             self.beta[n][(t+1, rnext)])
 
@@ -78,13 +80,14 @@ class BaumWelch(object):
             for r in xrange(model.nrewards):
                 for rnext in xrange(model.nrewards):
                     self.beta[n][(0, r)] += (model.sigma[traj[(1, 0)]] *
-                        model.tau(r, rnext, traj[(1, 0)]) *
+                        model.tau[r, rnext, traj[(1, 0)]] *
                         model.policy[r, traj[(1, 0)], traj[(1, 1)]] *
                         self.beta[n][1, rnext])
 
             # Compute sequence probabilities
             self.seq_probs[n] = np.sum(self.alpha[n][tmax, :])
 
+    @jit
     def ri_given_seq(self, seq, time, rtheta):
         """
         Return P(R_i| S, A) for a particular seq
@@ -93,7 +96,7 @@ class BaumWelch(object):
         return (self.alpha[seq][(time, rtheta)] * self.beta[seq][(time, rtheta)] /
                     self.seq_probs[seq])
 
-
+    @jit
     def ri_given_seq2(self, seq, time, rthetaprev, rtheta):
         """
         Return P(R_{i-1}, R_i| S, A) for a particular seq
@@ -107,7 +110,7 @@ class BaumWelch(object):
 
         return (self.alpha[seq][(time-1, rthetaprev)] *
                 self.beta[seq][(time, rtheta)] *
-                model.T[sprev, aprev, s] * model.tau(rthetaprev, rtheta, s) *
+                model.T[sprev, aprev, s] * model.tau[rthetaprev, rtheta, s] *
                 model.policy[rtheta, s, a] / self.seq_probs[seq])
 
 
