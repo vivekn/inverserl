@@ -196,6 +196,33 @@ class IRLModel:
         @ Daniel
         """
 
+        omega = self.omega
+
+        currOmegaCoordinate = 1
+        lastOmegaCoordinate = 0 #what are good valyes for intial omegas?
+
+        for r1 in nrewards:
+            for r2 in nrewards:
+                bigSum = 0
+                while (iter < max_iters and (abs(currOmegaCoordinate-lastOmegaCoordinate) > tolerance)):
+                    iter = iter + 1
+                    lastOmegaCoordinate = currOmegaCoordinate
+                    for traj in range(len(self.trajectories)):
+                        Tn = len(self.trajectories[traj])
+                        smallSum = 0
+                        for t in range(Tn):
+                            smallerSum = 0
+                            for r in nrewards:
+                                prob = this.BWLearn.ri_given_seq2(traj,t,self.Theta[r1],self.Theta[r2])
+                                tau = tau(self.Theta[r1],self.Theta[r2],traj,t)
+                                dTau = 
+                                smallerSum+=prob*dTau/tau
+                            smallSum+=smallerSum
+                        bigSum+=smallSum
+                    currOmegaCoordinate = lastOmegaCoordinate + self.delta*bigSum
+                omega[r1][r2] = #TODO
+
+
 
 
 
