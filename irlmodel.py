@@ -272,7 +272,7 @@ class IRLModel:
                             den = (np.sum(np.exp(np.dot(self.omega[rtheta1], s))) - selftransition) + 1
                             gradTau[r1][r2][s][f] = num/den
         
-        return gradTau[rtheta1][rtheta2][state]
+        return gradTau
 
 
     def maximize_reward_transitions(self):
@@ -293,16 +293,16 @@ class IRLModel:
                 for r2 in nrewards:
                     bigSum = 0
                     lastOmegaCoordinate = currOmegaCoordinate
+                    dTau = gradient_tau(r1,r2)
                     for traj in range(len(self.trajectories)):
                         Tn = len(self.trajectories[traj])
                         smallSum = 0
                         for t in range(Tn):
                             smallerSum = 0
                             for r in nrewards:
-                                prob = this.BWLearn.ri_given_seq2(traj,t,self.Theta[r1],self.Theta[r2])
-                                tau = tau_helper(self.Theta[r1],self.Theta[r2],traj,t)
-                                dTau = gradient_tau(self.Theta[r1],self.Theta[r2])[traj[t,0]]
-                                smallerSum+=prob*dTau/tau
+                                prob = self.BWLearn.ri_given_seq2(traj,t,self.Theta[r1],self.Theta[r2])
+                                tau = tau_helper(r1,r2,traj,t)
+                                smallerSum+=prob*dTau[traj[t,0]]/tau
                             smallSum+=smallerSum
                         bigSum+=smallSum
                     omega[r1][r2] +=self.delta*bigSum
