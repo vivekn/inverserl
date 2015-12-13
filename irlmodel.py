@@ -130,16 +130,6 @@ class IRLModel:
                                 denominator += self.BWLearn.ri_given_seq2(n, t, r1, r3)
                     self.tau[r1, r2, s] = numerator / denominator
 
-    def pi(self,rtheta,traj,time):
-
-        numerator = np.exp(self.boltzmann*self.Q(rtheta,traj[time][0],traj[time][1]))
-
-        denominator = 0
-        for a in self.nactions:
-            denominator+= np.exp(self.boltzmann*self.Q(rtheta,traj[time][0],traj[time][1]))
-
-        return numerator/denominator
-
 
 
     def maximize_nu(self):
@@ -236,10 +226,10 @@ class IRLModel:
             #gradQ s*f*a tensor
             gradQ = (np.swapaxes(np.tile(self.state_features, self.nactions), 1, 2)
                         + self.gamma * np.tensordot(self.T, self.state_features))
-
             Z = np.sum(np.exp(self.boltzmann * Q), 1)
             for s in xrange(self.nstates):
                 gradZ[s] = self.boltzmann * np.dot(np.exp(self.boltzmann * Q[s]), gradQ[s])
+
 
             for s in xrange(self.nstates):
                 pi[s] = np.exp(self.boltzmann * Q[s]) / Z[s]
@@ -255,12 +245,62 @@ class IRLModel:
 
         return (pi, gradPi)
 
+    def gradient_tau(self, rtheta1, rtheta2, state,iters=100):
 
-    def maximize_reward_transitions(self):
+        gradTau = np.zeros((self.nrewards,self.nrewards,self.nstates,self.ndynfeatures))
+
+        for r1 in xrange(self.nrewards):
+            for r2 in xrange(self.nrewards):
+                for s in xrange(self.nstates):
+                    for f in self.ndynfeatures:
+                        if r1==r2:
+                            gradTau[r1][r2][s][f] = 0
+                        else:
+                            num = np.exp(np.tensordot(self.omega[r1][r2],self.dynamic_features[s]))*self.ndynfeatures[f]
+                            selftransition = np.exp(np.dot(self.omega[rtheta1, rtheta1]), s)
+                            den = (np.sum(np.exp(np.dot(self.omega[rtheta1], s))) - selftransition) + 1
+                            gradTau[r1][r2][s][f] = num/den
+        
+        return gradTau
+
+
+    def maximize_reward_transitions(self,max_iters=100, tolerance = 0.01):
         """
         TODO: Find the optimal set of weights for the reward transitions
         @ Daniel
         """
+
+        omega = np.copy(self.omega)
+
+        curr_magnitude = 0
+        last_magnitude = 1e9
+        iter = 0
+
+        while (iter < max_iters and (abs(curr_magnitude-last_magnitude) > tolerance)):
+            iter = iter + 1
+            for r1 in xrange(self.nrewards):
+                for r2 in xrange(self.nrewards):
+                    bigSum = 0
+                    dTau = self.gradient_tau(r1,r2)
+                    for traj in range(len(self.trajectories)):
+                        Tn = len(self.trajectories[traj])
+                        smallSum = 0
+                        for t in range(Tn):
+                            smallerSum = 0
+                            for r in xrange(self.nrewards):
+                                prob = self.BWLearn.ri_given_seq2(traj,t,self.Theta[r1],self.Theta[r2])
+                                tau = self.tau_helper(r1,r2,traj,t)
+                                smallerSum+=prob*dTau[traj[t,0]]/tau
+                            smallSum+=smallerSum
+                        bigSum+=smallSum
+                    omega[r1][r2] +=self.delta*bigSum
+
+            last_magnitude = curr_magnitude
+            curr_magnitude = np.sum(np.abs(omega))
+
+        self.omega = omega
+            
+
 
 
     def training_log_likelihood(self):
