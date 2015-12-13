@@ -1,18 +1,17 @@
 import numpy as np
 import collections
+import random
 from baum_welch import BaumWelch
-from numba import jit
 
 class IRLModel:
     def __init__(self, nstates, nactions,
-        nrewards, nfeatures, T, stateTransition, gamma, delta, state_features,
+        nrewards, nfeatures, T, gamma, delta, state_features,
         dynamic_features=None):
 
         self.nstates = nstates
         self.nactions = nactions
         self.nfeatures = nfeatures # num features for state observations
         self.T = T # transition model
-        self.stateTransition = stateTransition
         self.Q = np.zeros([nrewards,nstates, nactions]) # Q-value function (NOT the EM Q fn)
         self.nrewards = nrewards
         self.gamma = gamma
@@ -22,17 +21,17 @@ class IRLModel:
         # Weights for the reward transition functions
         self.omega = np.random.rand(nrewards, nrewards, nfeatures)
         # Probabilities for the initial state distribution
-        self.nu = np.ones((1, nstates)) / nstates
+        self.nu = np.ones(nstates) / nstates
         # Probabilities for the initial reward function distribution
-        self.sigma = np.ones((1, nrewards)) / nrewards
+        self.sigma = np.ones(nrewards) / nrewards
         # function that returns features for a state
         self.delta = delta
 
-        self.tau = np.zeros(self.nrewards, self.nrewards, self.nstates)
+        self.tau = np.zeros((self.nrewards, self.nrewards, self.nstates))
 
         self.state_features = state_features
         self.dynamic_features = dynamic_features
-        if dynamic_features:
+        if dynamic_features != None:
             self.ndynfeatures = dynamic_features.shape[1]
         else:
             self.ndynfeatures = 0
@@ -40,7 +39,7 @@ class IRLModel:
         self.initial_state_prob =  collections.defaultdict(int)
 
         #Initialize policy
-        self.policy = np.zeros(nrewards, nstates, nactions)
+        self.policy = np.zeros((nrewards, nstates, nactions))
         for r in xrange(nrewards):
             self.policy[r], _ = self.gradient_pi(r)
 
@@ -109,7 +108,6 @@ class IRLModel:
                 for r2 in xrange(self.nrewards):
                     self.tau[r1, r2, s] = self.tau_helper(r1, r2, s)
 
-    @jit
     def precompute_tau_static(self):
         """
         This is very slow, need to optimize it
@@ -176,7 +174,7 @@ class IRLModel:
         last_magnitude = 1e9
         iter = 0
         Theta = np.copy(self.Theta)
-        policy = np.zeros(self.nrewards, self.nstates, self.nactions)
+        policy = np.zeros((self.nrewards, self.nstates, self.nactions))
 
         while (iter < max_iters and
             (abs(curr_magnitude - last_magnitude) > tolerance)):
@@ -216,16 +214,23 @@ class IRLModel:
 
         # Initialize values
         V = np.dot(self.state_features, self.Theta[rtheta])
-        Q = np.tile(V, self.nactions)
+        Q = np.tile(V.T, [self.nactions, 1]).T
         gradV = np.copy(self.state_features)
-        gradZ = np.zeros(self.nstates, self.nfeatures)
+        gradZ = np.zeros((self.nstates, self.nfeatures))
+        gradQ = np.zeros((self.nstates, self.nfeatures, self.nactions))
 
         for iter in xrange(iters):
-            Q = (np.tile(np.dot(self.state_features, self.Theta[rtheta]), self.nactions) +
-                    self.gamma * np.tensordot(self.T, V))
+            r_s = np.dot(self.state_features, self.Theta[rtheta])
+            for s in xrange(self.nstates):
+                #import pdb; pdb.set_trace()
+                Q[s] = np.tile(r_s[s], [self.nactions]).T + self.gamma * V[s] * np.dot(self.T[s], V).T
+
             #gradQ s*f*a tensor
-            gradQ = (np.swapaxes(np.tile(self.state_features, self.nactions), 1, 2)
-                        + self.gamma * np.tensordot(self.T, self.state_features))
+            for s in xrange(self.nstates):
+                gradQ[s] = (np.tile(self.state_features[s], [self.nactions, 1]).T + self.gamma *
+                                np.dot(self.T[s], gradV).T)
+
+
             Z = np.sum(np.exp(self.boltzmann * Q), 1)
             for s in xrange(self.nstates):
                 gradZ[s] = self.boltzmann * np.dot(np.exp(self.boltzmann * Q[s]), gradQ[s])
@@ -237,9 +242,11 @@ class IRLModel:
             for s in xrange(self.nstates):
                 for a in xrange(self.nactions):
                     temp = np.exp(self.boltzmann*Q[s, a])
+                    #import pdb; pdb.set_trace()
                     gradPi[s, a] = (self.boltzmann * Z[s] * temp * gradQ[s, a] - temp * gradZ[s]) / (Z[s] ** 2)
 
-            V = pi * Q
+            V = np.sum(pi*Q, 1)
+
             for s in xrange(self.nstates):
                 gradV[s] = np.dot(Q[s], gradPi[s, a]) + np.dot(pi[s], gradQ[s, a])
 
@@ -260,7 +267,7 @@ class IRLModel:
                             selftransition = np.exp(np.dot(self.omega[rtheta1, rtheta1]), s)
                             den = (np.sum(np.exp(np.dot(self.omega[rtheta1], s))) - selftransition) + 1
                             gradTau[r1][r2][s][f] = num/den
-        
+
         return gradTau
 
 
@@ -299,7 +306,7 @@ class IRLModel:
             curr_magnitude = np.sum(np.abs(omega))
 
         self.omega = omega
-            
+
 
 
 
@@ -310,9 +317,11 @@ class IRLModel:
         """
         L = 0.0
         for n, traj in enumerate(self.trajectories):
-            init_state_prob = np.log(self.nu(traj[1, 0]))
+            #import pdb; pdb.set_trace()
+            init_state_prob = np.log(self.nu[traj[1, 0]])
             first_rew_prob = 0.0
             for r in xrange(self.nrewards):
+                #import pdb; pdb.set_trace()
                 first_rew_prob += (self.BWLearn.ri_given_seq(n, 1, r) *
                     np.log(self.sigma[r]))
             policy_prob = 0.0
@@ -326,7 +335,7 @@ class IRLModel:
                 for rprev in xrange(self.nrewards):
                     for r in xrange(self.nrewards):
                         reward_transition_prob += (self.BWLearn.ri_given_seq2(
-                            n, t, rprev, r) * np.log(self.tau(rprev, r, state)))
+                            n, t, rprev, r) * np.log(self.tau[rprev, r, state]))
             transition_prob = 0.0
             for t in xrange(2, len(traj)):
                 sprev = traj[t-1, 0]
@@ -348,5 +357,23 @@ class IRLModel:
         @ Frances
         """
         pass
+
+def test():
+    T = np.random.rand(2, 3, 2)
+    state_features = np.random.rand(2, 3)
+    dynamic_features = np.random.rand(2, 4)
+    testModel = IRLModel(2, 3, 2, 3, T, 0.95, 1e-4, state_features,
+        dynamic_features)
+    trajectories = []
+    for i in xrange(100):
+        Tn = np.random.randint(5, 101)
+        traj = np.zeros((Tn+1, 2))
+        for t in xrange(1, Tn+1):
+            traj[t, 0] = np.random.randint(0, 2)
+            traj[t, 1] = np.random.randint(0, 2)
+        trajectories.append(traj)
+    testModel.learn(trajectories, 1e-3, 10)
+
+test()
 
 
