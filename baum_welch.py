@@ -83,7 +83,7 @@ class BaumWelch(object):
                         self.beta[n][1, rnext])
 
             # Compute sequence probabilities
-            self.seq_probs[n] = np.sum(self.alpha[n][tmax, :])
+            self.seq_probs[n] = np.sum(self.alpha[n][tmax-1, :])
 
     def ri_given_seq(self, seq, time, rtheta):
         """
@@ -103,8 +103,8 @@ class BaumWelch(object):
         aprev = traj[(time-1, 1)]
         model = self.model
 
-        return (self.alpha[seq][(time-1, rthetaprev)] *
-                self.beta[seq][(time, rtheta)] *
+        return (self.alpha[seq][time-1, rthetaprev] *
+                self.beta[seq][time, rtheta] *
                 model.T[sprev, aprev, s] * model.tau[rthetaprev, rtheta, s] *
                 model.policy[rtheta, s, a] / self.seq_probs[seq])
 
