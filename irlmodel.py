@@ -159,7 +159,7 @@ class IRLModel:
 
         for r in xrange(self.nrewards):
             for traj in self.trajectories:
-                probSum+=self.BWLearn.ri_given_seq(np.array(traj),0,r)
+                # probSum+=self.BWLearn.ri_given_seq(np.array(traj),0,r)
 
             curr_prob = probSum/len(self.trajectories)
 
@@ -302,7 +302,7 @@ class IRLModel:
                                 smallerSum+=prob*dTau[r1,r2,self.trajectories[traj][t,0],:]/tau
                             smallSum+=smallerSum
                         bigSum+=smallSum
-                    print omega[r1][r2].shape
+                    # print omega[r1][r2].shape
                     omega[r1][r2] +=self.delta*bigSum
 
             last_magnitude = curr_magnitude
