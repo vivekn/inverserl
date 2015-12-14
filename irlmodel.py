@@ -5,6 +5,8 @@ from baum_welch import BaumWelch
 import time
 np.seterr(all='raise')
 
+np.seterr(all='raise')
+
 class IRLModel:
     def __init__(self, nstates, nactions,
         nrewards, nfeatures, T, gamma, delta, state_features,
@@ -17,7 +19,7 @@ class IRLModel:
         self.Q = np.zeros([nrewards,nstates, nactions]) # Q-value function (NOT the EM Q fn)
         self.nrewards = nrewards
         self.gamma = gamma
-        self.boltzmann = 0.5
+        self.boltzmann = 0.005
         # Weights for the linear reward functions
         self.Theta = np.random.rand(nrewards, nfeatures)
         # Weights for the reward transition functions
@@ -26,7 +28,7 @@ class IRLModel:
         # Probabilities for the initial reward function distribution
         self.sigma = np.ones(nrewards) / nrewards
         # function that returns features for a state
-        self.delta = delta
+        self.delta = 10**-5 * delta
 
         self.tau = np.zeros((self.nrewards, self.nrewards, self.nstates))
 
@@ -61,7 +63,11 @@ class IRLModel:
         iter = 0
 
         self.nu = self.maximize_nu()
-        self.precompute_tau_dynamic()
+        if self.ndynfeatures > 0:
+            self.precompute_tau_dynamic()
+        else:
+            self.precompute_tau_static()
+
 
         while (iter < max_iters and
             (abs(curr_likelihood - last_likelihood) > tolerance)):
@@ -115,7 +121,6 @@ class IRLModel:
             for r1 in xrange(self.nrewards):
                 for r2 in xrange(self.nrewards):
                     self.tau[r1, r2, s] = self.tau_helper(r1, r2, s)
-        # print 'dyn', self.tau
 
     def precompute_tau_static(self):
         """
@@ -137,7 +142,6 @@ class IRLModel:
                                 denominator += self.BWLearn.ri_given_seq2(n, t, r1, r3)
                     self.tau[r1, r2, s] = numerator / denominator
 
-        # print 'stat', self.tau
 
 
     def maximize_nu(self):
@@ -204,6 +208,7 @@ class IRLModel:
                         gradTheta += prob * gradPi[s, a] / pi[s, a]
 
                 # Set parameters
+                print gradTheta
                 Theta[r] = Theta[r] + self.delta * gradTheta
 
             # Compute magnitudes
@@ -228,18 +233,23 @@ class IRLModel:
         gradV = np.copy(self.state_features)
         gradZ = np.zeros((self.nstates, self.nfeatures))
         gradQ = np.zeros((self.nstates, self.nfeatures, self.nactions))
+        Z = np.zeros(self.nstates)
 
         for iter in xrange(iters):
             r_s = np.dot(self.state_features, self.Theta[rtheta])
             for s in xrange(self.nstates):
-                Q[s] = np.tile(r_s[s], [self.nactions]).T + self.gamma * V[s] * np.dot(self.T[s], V).T
+                for a in xrange(self.nstates):
+                    Q[s, a] = r_s[s] + self.gamma * V[s] * np.dot(self.T[s, a], V).T
 
-            #gradQ s*f*a tensor
+
+           # #gradQ s*f*a tensor
             for s in xrange(self.nstates):
                 gradQ[s] = (np.tile(self.state_features[s], [self.nactions, 1]).T + self.gamma *
                                 np.dot(self.T[s], gradV).T)
-            print Q
-            Z = np.sum(np.exp(self.boltzmann * Q), 1)
+
+
+            for s in xrange(self.nstates):
+                Z[s] = np.sum(np.exp(self.boltzmann * Q))
             for s in xrange(self.nstates):
                 # print gradQ[s]
                 gradZ[s] = self.boltzmann * np.dot(np.exp(self.boltzmann * Q[s]), gradQ[s])
@@ -257,6 +267,7 @@ class IRLModel:
 
             for s in xrange(self.nstates):
                 gradV[s] = np.dot(Q[s], gradPi[s, a]) + np.dot(pi[s], gradQ[s, a])
+            print iter, V, Z
 
         return (pi, gradPi)
 
@@ -271,7 +282,6 @@ class IRLModel:
                         if r1==r2:
                             gradTau[r1][r2][s][f] = 0
                         else:
-                            # print r1, r2, s, f, self.omega
                             num = np.exp(np.dot(self.omega[r1][r2],self.dynamic_features[s]))*self.dynamic_features[s, f]
                             #import pdb; pdb.set_trace()
                             selftransition = np.exp(np.dot(self.omega[r1, r1], self.dynamic_features[s]))
@@ -312,7 +322,6 @@ class IRLModel:
                                 smallerSum+=prob*dTau[r1,r2,self.trajectories[traj][t,0],:]/tau
                             smallSum+=smallerSum
                         bigSum+=smallSum
-                    # print omega[r1][r2].shape
                     omega[r1][r2] +=self.delta*bigSum
 
             last_magnitude = curr_magnitude
@@ -325,7 +334,6 @@ class IRLModel:
         Returns log likelihood for the training trajectories
         based on the current parameters of the model
         """
-        # print self.tau
         L = 0.0
         for n, traj in enumerate(self.trajectories):
             #import pdb; pdb.set_trace()
@@ -409,6 +417,10 @@ class IRLModel:
 
 def test():
     T = np.random.rand(2, 3, 2)
+    for i in xrange(2):
+        for j in xrange(3):
+            s = np.sum(T[i, j])
+            T[i, j] = T[i, j] / s
     state_features = np.random.rand(2, 3)
     dynamic_features = np.random.rand(2, 4)
     testModel = IRLModel(2, 3, 2, 3, T, 0.95, 1e-4, state_features,
