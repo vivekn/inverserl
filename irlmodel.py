@@ -158,8 +158,8 @@ class IRLModel:
         probSum = 0
 
         for r in xrange(self.nrewards):
-            for traj in self.trajectories:
-                probSum+=self.BWLearn.ri_given_seq(np.array(traj),0,r)
+            for n, traj in enumerate(self.trajectories):
+                probSum+=self.BWLearn.ri_given_seq(n,0,r)
 
             curr_prob = probSum/len(self.trajectories)
 
@@ -395,7 +395,7 @@ class IRLModel:
                     r_list[T] = reward
                     cur_argmax = r_list
             return t_pi*cur_max, cur_argmax
-            
+
 
 def test():
     T = np.random.rand(2, 3, 2)
