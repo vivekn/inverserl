@@ -1,5 +1,4 @@
 import numpy as np
-from numba import jit
 
 class BaumWelch(object):
     """
@@ -16,9 +15,8 @@ class BaumWelch(object):
         # Initialize data structures
         self.alpha = [np.zeros((traj.shape)) for traj in trajectories]
         self.beta = [np.zeros((traj.shape)) for traj in trajectories]
-        self.seq_probs = np.zeros((1, len(trajectories)))
+        self.seq_probs = np.zeros(len(trajectories))
 
-    @jit
     def update(self):
         """
         Computes forward and backward probabilities
@@ -85,18 +83,15 @@ class BaumWelch(object):
                         self.beta[n][1, rnext])
 
             # Compute sequence probabilities
-            self.seq_probs[n] = np.sum(self.alpha[n][tmax, :])
+            self.seq_probs[n] = np.sum(self.alpha[n][tmax-1, :])
 
-    @jit
     def ri_given_seq(self, seq, time, rtheta):
         """
         Return P(R_i| S, A) for a particular seq
         """
-
         return (self.alpha[seq][(time, rtheta)] * self.beta[seq][(time, rtheta)] /
                     self.seq_probs[seq])
 
-    @jit
     def ri_given_seq2(self, seq, time, rthetaprev, rtheta):
         """
         Return P(R_{i-1}, R_i| S, A) for a particular seq
@@ -108,8 +103,8 @@ class BaumWelch(object):
         aprev = traj[(time-1, 1)]
         model = self.model
 
-        return (self.alpha[seq][(time-1, rthetaprev)] *
-                self.beta[seq][(time, rtheta)] *
+        return (self.alpha[seq][time-1, rthetaprev] *
+                self.beta[seq][time, rtheta] *
                 model.T[sprev, aprev, s] * model.tau[rthetaprev, rtheta, s] *
                 model.policy[rtheta, s, a] / self.seq_probs[seq])
 
