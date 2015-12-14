@@ -157,9 +157,9 @@ class IRLModel:
         curr_prob = 0
         probSum = 0
 
-        for r in self.nrewards:
+        for r in xrange(self.nrewards):
             for traj in self.trajectories:
-                probSum+=self.BWLearn.ri_given_seq(traj,0,self.Theta[r])
+                probSum+=self.BWLearn.ri_given_seq(np.array(traj),0,r)
 
             curr_prob = probSum/len(self.trajectories)
 
@@ -263,7 +263,7 @@ class IRLModel:
                         if r1==r2:
                             gradTau[r1][r2][s][f] = 0
                         else:
-                            print r1, r2, s, f, self.omega
+                            # print r1, r2, s, f, self.omega
                             num = np.exp(np.dot(self.omega[r1][r2],self.dynamic_features[s]))*self.dynamic_features[s, f]
                             #import pdb; pdb.set_trace()
                             selftransition = np.exp(np.dot(self.omega[r1, r1], self.dynamic_features[s]))
@@ -299,9 +299,10 @@ class IRLModel:
                             for r in xrange(self.nrewards):
                                 prob = self.BWLearn.ri_given_seq2(traj,t,r1,r2)
                                 tau = self.tau_helper(r1,r2,self.trajectories[traj][t, 0])
-                                smallerSum+=prob*dTau[self.trajectories[traj][t,0]]/tau
+                                smallerSum+=prob*dTau[r1,r2,self.trajectories[traj][t,0],:]/tau
                             smallSum+=smallerSum
                         bigSum+=smallSum
+                    print omega[r1][r2].shape
                     omega[r1][r2] +=self.delta*bigSum
 
             last_magnitude = curr_magnitude
