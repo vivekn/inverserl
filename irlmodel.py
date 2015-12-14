@@ -2,6 +2,8 @@ import numpy as np
 import collections
 import random
 from baum_welch import BaumWelch
+import time
+np.seterr(all='raise')
 
 class IRLModel:
     def __init__(self, nstates, nactions,
@@ -30,7 +32,7 @@ class IRLModel:
 
         self.state_features = state_features
         self.dynamic_features = dynamic_features
-        if dynamic_features != None:
+        if not dynamic_features.size==0:
             self.ndynfeatures = dynamic_features.shape[1]
             self.omega = np.random.rand(nrewards, nrewards, self.ndynfeatures)
         else:
@@ -59,13 +61,16 @@ class IRLModel:
         iter = 0
 
         self.nu = self.maximize_nu()
+        self.precompute_tau_dynamic()
 
         while (iter < max_iters and
             (abs(curr_likelihood - last_likelihood) > tolerance)):
             iter = iter + 1
+            print iter
             # Maximize parameters simultaneously
             omega = None
             self.BWLearn.update()
+
             if self.ndynfeatures > 0:
                 self.precompute_tau_dynamic()
                 omega = self.maximize_reward_transitions()
@@ -80,8 +85,11 @@ class IRLModel:
             if omega:
                 self.omega = omega
             # Compute likelihoods
+
             last_likelihood = curr_likelihood
             curr_likelihood = self.training_log_likelihood()
+
+        print "EM done"
 
     def tau_helper(self, rtheta1, rtheta2, s):
         """
@@ -107,7 +115,7 @@ class IRLModel:
             for r1 in xrange(self.nrewards):
                 for r2 in xrange(self.nrewards):
                     self.tau[r1, r2, s] = self.tau_helper(r1, r2, s)
-        print 'dyn', self.tau
+        # print 'dyn', self.tau
 
     def precompute_tau_static(self):
         """
@@ -129,7 +137,7 @@ class IRLModel:
                                 denominator += self.BWLearn.ri_given_seq2(n, t, r1, r3)
                     self.tau[r1, r2, s] = numerator / denominator
 
-        print 'stat', self.tau
+        # print 'stat', self.tau
 
 
     def maximize_nu(self):
@@ -205,7 +213,7 @@ class IRLModel:
 
 
 
-    def gradient_pi(self, rtheta, iters=100):
+    def gradient_pi(self, rtheta, iters=5):
         """
         Returns pi(s, a) matrix for reward function rtheta.
         Also returns the gradient of pi, uses a Q learning like
@@ -230,10 +238,10 @@ class IRLModel:
             for s in xrange(self.nstates):
                 gradQ[s] = (np.tile(self.state_features[s], [self.nactions, 1]).T + self.gamma *
                                 np.dot(self.T[s], gradV).T)
-
-
+            print Q
             Z = np.sum(np.exp(self.boltzmann * Q), 1)
             for s in xrange(self.nstates):
+                # print gradQ[s]
                 gradZ[s] = self.boltzmann * np.dot(np.exp(self.boltzmann * Q[s]), gradQ[s])
 
 
@@ -273,7 +281,7 @@ class IRLModel:
         return gradTau
 
 
-    def maximize_reward_transitions(self,max_iters=100, tolerance = 0.01):
+    def maximize_reward_transitions(self,max_iters=5, tolerance = 0.01):
         """
         TODO: Find the optimal set of weights for the reward transitions
         @ Daniel
@@ -284,9 +292,11 @@ class IRLModel:
         curr_magnitude = 0
         last_magnitude = 1e9
         iter = 0
+        timeout = time.time() + 10
 
-        while (iter < max_iters and (abs(curr_magnitude-last_magnitude) > tolerance)):
+        while (iter < max_iters and (abs(curr_magnitude-last_magnitude) > tolerance and time.time()<timeout)):
             iter = iter + 1
+            print abs(curr_magnitude-last_magnitude)
             dTau = self.gradient_tau()
             for r1 in xrange(self.nrewards):
                 for r2 in xrange(self.nrewards):
@@ -315,7 +325,7 @@ class IRLModel:
         Returns log likelihood for the training trajectories
         based on the current parameters of the model
         """
-        print self.tau
+        # print self.tau
         L = 0.0
         for n, traj in enumerate(self.trajectories):
             #import pdb; pdb.set_trace()

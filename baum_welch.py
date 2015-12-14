@@ -26,6 +26,7 @@ class BaumWelch(object):
 
         ntraj = len(self.alpha)
 
+
         for n in xrange(ntraj):
             traj = self.trajectories[n]
 
@@ -51,6 +52,7 @@ class BaumWelch(object):
                 aprev = traj[(t-1, 1)]
                 for r in xrange(model.nrewards):
                     for rprev in xrange(model.nrewards):
+                        #print model.T[sprev, aprev, s],model.tau[r, rprev, s],model.policy[r, s, a] ,self.alpha[n][(t-1, rprev)]
                         self.alpha[n][(t, r)] += (model.T[sprev, aprev, s] *
                             model.tau[r, rprev, s] *
                             model.policy[r, s, a] *
@@ -96,6 +98,8 @@ class BaumWelch(object):
         """
         Return P(R_{i-1}, R_i| S, A) for a particular seq
         """
+
+        # print self.seq_probs[seq]
         traj = self.trajectories[seq]
         s = traj[(time, 0)]
         sprev = traj[(time-1, 0)]
