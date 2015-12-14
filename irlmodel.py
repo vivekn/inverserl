@@ -356,7 +356,45 @@ class IRLModel:
         and the learned parameters of the model
         @ Frances
         """
-        pass
+        init_r_list = [0 for i in xrange(T+1)]
+        T = len(trajectory)
+        cur_max = -1
+        cur_argmax = None
+        for reward in self.Theta:
+            res, r_list = viterbi_recursive(trajectory, reward, T, init_r_list)
+            if res > cur_max:
+                cur_max = res
+                r_list[T] = reward
+                cur_argmax = r_list
+
+        return cur_argmax
+
+    def viterbi_recursive(self, trajectory, r_theta, T, r_list):
+        cur_max = -1
+        cur_argmax = None
+
+        if T == 1:
+            nu_pi = self.nu(trajectory[1][0])*self.policy(trajectory[1][0], trajectory[1][1])
+            for reward in self.Theta:
+                res, r_list = self.sigma(r_theta)*tau_helper(reward, trajectory[1][0], r_theta)
+                if res > cur_max:
+                    cur_max = res
+                    r_list[T] = reward
+                    cur_argmax = r_list
+            return nu_pi*cur_max, cur_argmax
+        else:
+            # t*pi
+            t_pi = self.T(trajectory[T-1][0], trajectory[T-1][1], trajectory[T][0])*self.policy(r_theta, trajectory[T][0], trajectory[T][1])
+
+            #max among rewards
+            for reward in self.Theta:
+                res, r_list = viterbi_recursive(trajectory, reward, T-1)*tau_helper(reward, trajectory[T][0], r_theta)
+                if res > cur_max:
+                    cur_max = res
+                    r_list[T] = reward
+                    cur_argmax = r_list
+            return t_pi*cur_max, cur_argmax
+            
 
 def test():
     T = np.random.rand(2, 3, 2)
