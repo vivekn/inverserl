@@ -159,7 +159,7 @@ class IRLModel:
 
         for r in xrange(self.nrewards):
             for traj in self.trajectories:
-                # probSum+=self.BWLearn.ri_given_seq(np.array(traj),0,r)
+                probSum+=self.BWLearn.ri_given_seq(np.array(traj),0,r)
 
             curr_prob = probSum/len(self.trajectories)
 
