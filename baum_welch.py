@@ -14,7 +14,9 @@ class BaumWelch(object):
 
         # Initialize data structures
         self.alpha = [np.zeros((traj.shape)) for traj in trajectories]
+        self.logalpha = [np.zeros(traj.shape[0]) for traj in trajectories]
         self.beta = [np.zeros((traj.shape)) for traj in trajectories]
+        self.logbeta = [np.zeros(traj.shape[0]) for traj in trajectories]
         self.seq_probs = np.zeros(len(trajectories))
 
     def update(self):
@@ -35,6 +37,12 @@ class BaumWelch(object):
 
             for r in xrange(model.nrewards):
                 self.alpha[n][(0, r)] = model.sigma[r]
+
+            asum = np.sum(self.alpha[n][0])
+            self.logalpha[n][0] = np.log(asum)
+            self.alpha[n][0] /= asum
+
+
             tmax = self.alpha[n].shape[0]
 
             # for t = 1
@@ -42,7 +50,13 @@ class BaumWelch(object):
                 for rprev in xrange(model.nrewards):
                     self.alpha[n][(1, r)] += (model.sigma[traj[(1, 0)]] *
                         model.tau[r, rprev, traj[(1, 0)]] *
-                        model.policy[r, traj[(1, 0)], traj[(1, 1)]])
+                        model.policy[r, traj[(1, 0)], traj[(1, 1)]] *
+                        self.alpha[n][(0, rprev)])
+
+            asum = np.sum(self.alpha[n][1])
+            self.logalpha[n][1] = np.log(asum) + self.logalpha[n][0]
+            self.alpha[n][1] /= asum
+
 
             # for t = 2 to n
             for t in xrange(2, tmax):
@@ -57,11 +71,18 @@ class BaumWelch(object):
                             model.tau[r, rprev, s] *
                             model.policy[r, s, a] *
                             self.alpha[n][(t-1, rprev)])
+                asum = np.sum(self.alpha[n][t])
+                self.logalpha[n][t] = np.log(asum) + self.logalpha[n][t-1]
+                self.alpha[n][t] /= asum
 
 
             # self.beta recursion
             for r in xrange(model.nrewards):
                 self.beta[n][(tmax-1, r)] = 1
+
+            bsum = np.sum(self.beta[n][tmax-1])
+            self.logbeta[n][tmax-1] = np.log(bsum)
+            self.beta[n][tmax-1] /= bsum
 
             # for t = n-2 to 1
             for t in xrange(tmax-2, 0, -1):
@@ -75,6 +96,9 @@ class BaumWelch(object):
                             model.tau[rnext, r, snext] *
                             model.policy[rnext, snext, anext] *
                             self.beta[n][(t+1, rnext)])
+                bsum = np.sum(self.beta[n][t])
+                self.logbeta[n][t] = np.log(bsum) + self.logbeta[n][t+1]
+                self.beta[n][t] /= bsum
 
             # for t = 0
             for r in xrange(model.nrewards):
@@ -83,16 +107,19 @@ class BaumWelch(object):
                         model.tau[r, rnext, traj[(1, 0)]] *
                         model.policy[r, traj[(1, 0)], traj[(1, 1)]] *
                         self.beta[n][1, rnext])
+            bsum = np.sum(self.beta[n][0])
+            self.logbeta[n][0] = np.log(bsum) + self.logbeta[n][1]
+            self.beta[n][0] /= bsum
 
             # Compute sequence probabilities
-            # print self.alpha[n]
-            self.seq_probs[n] = np.sum(self.alpha[n][tmax-1, :])
+            self.seq_probs[n] = np.log(np.sum(self.alpha[n][tmax-1, :])) + self.logalpha[n][tmax-1]
 
     def ri_given_seq(self, seq, time, rtheta):
         """
         Return P(R_i| S, A) for a particular seq
         """
-        return (self.alpha[seq][(time, rtheta)] * self.beta[seq][(time, rtheta)] /
+        return np.exp(np.log(self.alpha[seq][(time, rtheta)]) + self.logalpha[seq][time] +
+                np.log(self.beta[seq][(time, rtheta)]) + self.logbeta[seq][time] -
                     self.seq_probs[seq])
 
     def ri_given_seq2(self, seq, time, rthetaprev, rtheta):
@@ -108,10 +135,14 @@ class BaumWelch(object):
         aprev = traj[(time-1, 1)]
         model = self.model
 
-        return (self.alpha[seq][time-1, rthetaprev] *
-                self.beta[seq][time, rtheta] *
-                model.T[sprev, aprev, s] * model.tau[rthetaprev, rtheta, s] *
-                model.policy[rtheta, s, a] / self.seq_probs[seq])
+        return np.exp(np.log(self.alpha[seq][time-1, rthetaprev]) +
+                (self.logalpha[seq][time-1] if (time > 0) else 0) +
+                np.log(self.beta[seq][time, rtheta]) +
+                self.logbeta[seq][time] +
+                np.log(model.T[sprev, aprev, s]) +
+                np.log(model.tau[rthetaprev, rtheta, s]) +
+                np.log(model.policy[rtheta, s, a]) -
+                self.seq_probs[seq])
 
 
 

@@ -5,7 +5,6 @@ from baum_welch import BaumWelch
 import time
 np.seterr(all='raise')
 
-np.seterr(all='raise')
 
 class IRLModel:
     def __init__(self, nstates, nactions,
@@ -28,7 +27,7 @@ class IRLModel:
         # Probabilities for the initial reward function distribution
         self.sigma = np.ones(nrewards) / nrewards
         # function that returns features for a state
-        self.delta = 10**-5 * delta
+        self.delta = delta
 
         self.tau = np.zeros((self.nrewards, self.nrewards, self.nstates))
 
@@ -97,7 +96,7 @@ class IRLModel:
 
             last_likelihood = curr_likelihood
             curr_likelihood = self.training_log_likelihood()
-            # print curr_likelihood
+            print curr_likelihood
 
         print "EM done"
 
@@ -116,8 +115,12 @@ class IRLModel:
 
         selftransition = np.exp(np.dot(
                 self.omega[rtheta1, rtheta1], state))
-        den = (np.sum
-            (np.exp(np.dot(self.omega[rtheta1], state))) - selftransition) + 1
+        try:
+            den = (np.sum
+                (np.exp(np.dot(self.omega[rtheta1], state))) - selftransition) + 1
+        except:
+            print np.dot(self.omega[rtheta1], state)
+
         return num / den
 
     def precompute_tau_dynamic(self):
@@ -182,7 +185,7 @@ class IRLModel:
         return sigma
 
 
-    def maximize_reward_weights(self, max_iters=100, tolerance = 0.01):
+    def maximize_reward_weights(self, max_iters=10, tolerance = 0.01):
         """
         Find the optimal set of weights for the reward functions using gradient ascent
         """
@@ -192,8 +195,8 @@ class IRLModel:
         Theta = np.copy(self.Theta)
         policy = np.zeros((self.nrewards, self.nstates, self.nactions))
 
-        while (iter < max_iters and
-            (abs(curr_magnitude - last_magnitude) > tolerance)):
+        while (iter < max_iters):# and
+           # (abs(curr_magnitude - last_magnitude) > tolerance)):
             iter = iter + 1
 
             for r in xrange(self.nrewards):
@@ -211,6 +214,8 @@ class IRLModel:
 
                 # Set parameters
                 Theta[r] = Theta[r] + self.delta * gradTheta
+                pi, _ = self.gradient_pi(r)
+                policy[r] = pi
 
             # Compute magnitudes
             last_magnitude = curr_magnitude
@@ -246,12 +251,12 @@ class IRLModel:
 
            # #gradQ s*f*a tensor
             for s in xrange(self.nstates):
-                gradQ[s] = (np.tile(self.state_features[s], [self.nactions, 1]).T + self.gamma *
-                                np.dot(self.T[s], gradV).T)
+                for a in xrange(self.nactions):
+                    gradQ[s, a] = self.state_features[s] + self.gamma * np.dot(self.T[s, a], gradV)
 
 
             for s in xrange(self.nstates):
-                Z[s] = np.sum(np.exp(self.boltzmann * Q))
+                Z[s] = np.sum(np.exp(self.boltzmann * Q[s]))
             for s in xrange(self.nstates):
                 gradZ[s] = self.boltzmann * np.dot(np.exp(self.boltzmann * Q[s]), gradQ[s])
 
@@ -291,7 +296,7 @@ class IRLModel:
         return gradTau
 
 
-    def maximize_reward_transitions(self,max_iters=5, tolerance = 0.01):
+    def maximize_reward_transitions(self, delta=1e-6, max_iters=5, tolerance = 0.01):
         """
         TODO: Find the optimal set of weights for the reward transitions
         @ Daniel
@@ -321,8 +326,7 @@ class IRLModel:
                                 smallerSum+=prob*dTau[r1,r2,self.trajectories[traj][t,0],:]/tau
                             smallSum+=smallerSum
                         bigSum+=smallSum
-                    # print bigSum
-                    omega[r1][r2] +=self.delta*bigSum
+                    omega[r1][r2] +=delta*bigSum
 
 
             last_magnitude = curr_magnitude
@@ -376,7 +380,7 @@ class IRLModel:
             reward_ctr += reward_transition_prob
             transition_ctr += transition_prob
 
-        # print nu_ctr, sigma_ctr, policy_ctr, reward_ctr, transition_ctr
+        print nu_ctr, sigma_ctr, policy_ctr, reward_ctr, transition_ctr
 
         return L
 
@@ -437,7 +441,7 @@ def test():
             T[i, j] = T[i, j] / s
     state_features = np.random.rand(2, 3)
     dynamic_features = np.random.rand(2, 4)
-    testModel = IRLModel(2, 3, 2, 3, T, 0.95, 1e-4, state_features,
+    testModel = IRLModel(2, 3, 2, 3, T, 0.95, 1e-3, state_features,
         dynamic_features)
     trajectories = []
     for i in xrange(100):
