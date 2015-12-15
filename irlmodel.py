@@ -63,6 +63,7 @@ class IRLModel:
         iter = 0
 
         self.nu = self.maximize_nu()
+
         if self.ndynfeatures > 0:
             self.precompute_tau_dynamic()
         else:
@@ -81,20 +82,22 @@ class IRLModel:
                 self.precompute_tau_dynamic()
                 omega = self.maximize_reward_transitions()
 
-            sigma = self.maximize_sigma()
+            sigma =  self.maximize_sigma()
+
             Theta = self.maximize_reward_weights()
             if self.ndynfeatures == 0:
                 self.precompute_tau_static()
 
             # Set parameters
             self.sigma, self.Theta = sigma, Theta
-            if omega != None:
+            self.Theta = Theta
+            if not omega.size==0:
                 self.omega = omega
             # Compute likelihoods
 
             last_likelihood = curr_likelihood
             curr_likelihood = self.training_log_likelihood()
-            print curr_likelihood
+            # print curr_likelihood
 
         print "EM done"
 
@@ -165,18 +168,16 @@ class IRLModel:
         """
         Maximize the initial reward function probabilities according to expert trajectories
         """
-        sigma = np.zeros(self.nstates)
-
-        curr_prob = 0
-        probSum = 0
+        sigma = np.copy(self.sigma)
 
         for r in xrange(self.nrewards):
+            probSum = 0
             for n, traj in enumerate(self.trajectories):
                 probSum+=self.BWLearn.ri_given_seq(n,0,r)
 
-            curr_prob = probSum/len(self.trajectories)
+            sigma[r] = probSum/len(self.trajectories)
+            print sigma[r]
 
-            sigma[r] = curr_prob
 
         return sigma
 
@@ -320,12 +321,13 @@ class IRLModel:
                                 smallerSum+=prob*dTau[r1,r2,self.trajectories[traj][t,0],:]/tau
                             smallSum+=smallerSum
                         bigSum+=smallSum
-                    print bigSum
+                    # print bigSum
                     omega[r1][r2] +=self.delta*bigSum
 
 
             last_magnitude = curr_magnitude
             curr_magnitude = np.sum(np.abs(omega))
+
         return omega
 
 
@@ -374,7 +376,7 @@ class IRLModel:
             reward_ctr += reward_transition_prob
             transition_ctr += transition_prob
 
-        print nu_ctr, sigma_ctr, policy_ctr, reward_ctr, transition_ctr
+        # print nu_ctr, sigma_ctr, policy_ctr, reward_ctr, transition_ctr
 
         return L
 

@@ -85,6 +85,7 @@ class BaumWelch(object):
                         self.beta[n][1, rnext])
 
             # Compute sequence probabilities
+            # print self.alpha[n]
             self.seq_probs[n] = np.sum(self.alpha[n][tmax-1, :])
 
     def ri_given_seq(self, seq, time, rtheta):
