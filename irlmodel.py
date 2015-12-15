@@ -18,7 +18,7 @@ class IRLModel:
         self.Q = np.zeros([nrewards,nstates, nactions]) # Q-value function (NOT the EM Q fn)
         self.nrewards = nrewards
         self.gamma = gamma
-        self.boltzmann = 0.005
+        self.boltzmann = 0.5
         # Weights for the linear reward functions
         self.Theta = np.random.rand(nrewards, nfeatures)
         # Weights for the reward transition functions
@@ -44,7 +44,7 @@ class IRLModel:
         #Initialize policy
         self.policy = np.zeros((nrewards, nstates, nactions))
         for r in xrange(nrewards):
-            self.policy[r], _ = self.gradient_pi(r)
+            self.policy[r], _ = self.gradient_pi(self.Theta[r])
 
     def learn(self, trajectories, tolerance, max_iters):
         """
@@ -115,11 +115,8 @@ class IRLModel:
 
         selftransition = np.exp(np.dot(
                 self.omega[rtheta1, rtheta1], state))
-        try:
-            den = (np.sum
+        den = (np.sum
                 (np.exp(np.dot(self.omega[rtheta1], state))) - selftransition) + 1
-        except:
-            print np.dot(self.omega[rtheta1], state)
 
         return num / den
 
@@ -179,13 +176,12 @@ class IRLModel:
                 probSum+=self.BWLearn.ri_given_seq(n,0,r)
 
             sigma[r] = probSum/len(self.trajectories)
-            print sigma[r]
+            #print sigma[r]
+        S = np.sum(sigma)
+        return sigma / S
 
 
-        return sigma
-
-
-    def maximize_reward_weights(self, max_iters=10, tolerance = 0.01):
+    def maximize_reward_weights(self, max_iters=30, tolerance = 0.01):
         """
         Find the optimal set of weights for the reward functions using gradient ascent
         """
@@ -201,7 +197,7 @@ class IRLModel:
 
             for r in xrange(self.nrewards):
                 # Q learning
-                pi, gradPi = self.gradient_pi(r)
+                pi, gradPi = self.gradient_pi(Theta[r])
                 policy[r] = pi
                 gradTheta = np.zeros(self.nfeatures)
                 for n, traj in enumerate(self.trajectories):
@@ -214,8 +210,6 @@ class IRLModel:
 
                 # Set parameters
                 Theta[r] = Theta[r] + self.delta * gradTheta
-                pi, _ = self.gradient_pi(r)
-                policy[r] = pi
 
             # Compute magnitudes
             last_magnitude = curr_magnitude
@@ -225,7 +219,7 @@ class IRLModel:
 
 
 
-    def gradient_pi(self, rtheta, iters=5):
+    def gradient_pi(self, theta_r, iters=25):
         """
         Returns pi(s, a) matrix for reward function rtheta.
         Also returns the gradient of pi, uses a Q learning like
@@ -235,7 +229,7 @@ class IRLModel:
         gradPi = np.zeros((self.nstates, self.nactions, self.nfeatures))
 
         # Initialize values
-        V = np.dot(self.state_features, self.Theta[rtheta])
+        V = np.dot(self.state_features, theta_r)
         Q = np.tile(V.T, [self.nactions, 1]).T
         gradV = np.copy(self.state_features)
         gradZ = np.zeros((self.nstates, self.nfeatures))
@@ -243,10 +237,12 @@ class IRLModel:
         Z = np.zeros(self.nstates)
 
         for iter in xrange(iters):
-            r_s = np.dot(self.state_features, self.Theta[rtheta])
+            r_s = np.dot(self.state_features, theta_r)
             for s in xrange(self.nstates):
-                for a in xrange(self.nstates):
-                    Q[s, a] = r_s[s] + self.gamma * V[s] * np.dot(self.T[s, a], V).T
+                #print 'old', Q[s], r_s[s], V
+                for a in xrange(self.nactions):
+                    Q[s, a] = r_s[s] + self.gamma * np.dot(self.T[s, a], V).T
+                #print 'new', Q[s]
 
 
            # #gradQ s*f*a tensor
@@ -273,6 +269,7 @@ class IRLModel:
 
             for s in xrange(self.nstates):
                 gradV[s] = np.dot(Q[s], gradPi[s, a]) + np.dot(pi[s], gradQ[s, a])
+
 
         return (pi, gradPi)
 
@@ -441,7 +438,7 @@ def test():
             T[i, j] = T[i, j] / s
     state_features = np.random.rand(2, 3)
     dynamic_features = np.random.rand(2, 4)
-    testModel = IRLModel(2, 3, 2, 3, T, 0.95, 1e-3, state_features,
+    testModel = IRLModel(2, 3, 2, 3, T, 0.95, 0.01, state_features,
         dynamic_features)
     trajectories = []
     for i in xrange(100):
