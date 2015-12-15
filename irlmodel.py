@@ -88,12 +88,13 @@ class IRLModel:
 
             # Set parameters
             self.sigma, self.Theta = sigma, Theta
-            if omega:
+            if omega != None:
                 self.omega = omega
             # Compute likelihoods
 
             last_likelihood = curr_likelihood
             curr_likelihood = self.training_log_likelihood()
+            print curr_likelihood
 
         print "EM done"
 
@@ -208,13 +209,13 @@ class IRLModel:
                         gradTheta += prob * gradPi[s, a] / pi[s, a]
 
                 # Set parameters
-                print gradTheta
                 Theta[r] = Theta[r] + self.delta * gradTheta
 
             # Compute magnitudes
             last_magnitude = curr_magnitude
             curr_magnitude = np.sum(np.abs(Theta))
         self.policy = policy
+        return Theta
 
 
 
@@ -251,7 +252,6 @@ class IRLModel:
             for s in xrange(self.nstates):
                 Z[s] = np.sum(np.exp(self.boltzmann * Q))
             for s in xrange(self.nstates):
-                # print gradQ[s]
                 gradZ[s] = self.boltzmann * np.dot(np.exp(self.boltzmann * Q[s]), gradQ[s])
 
 
@@ -267,7 +267,6 @@ class IRLModel:
 
             for s in xrange(self.nstates):
                 gradV[s] = np.dot(Q[s], gradPi[s, a]) + np.dot(pi[s], gradQ[s, a])
-            print iter, V, Z
 
         return (pi, gradPi)
 
@@ -300,13 +299,12 @@ class IRLModel:
         omega = np.copy(self.omega)
 
         curr_magnitude = 0
-        last_magnitude = 1e9
+        last_magnitude = -1e9
         iter = 0
         timeout = time.time() + 10
 
-        while (iter < max_iters and (abs(curr_magnitude-last_magnitude) > tolerance and time.time()<timeout)):
+        while (iter < max_iters):# and (abs(curr_magnitude-last_magnitude) > tolerance and time.time()<timeout)):
             iter = iter + 1
-            print abs(curr_magnitude-last_magnitude)
             dTau = self.gradient_tau()
             for r1 in xrange(self.nrewards):
                 for r2 in xrange(self.nrewards):
@@ -322,12 +320,14 @@ class IRLModel:
                                 smallerSum+=prob*dTau[r1,r2,self.trajectories[traj][t,0],:]/tau
                             smallSum+=smallerSum
                         bigSum+=smallSum
+                    print bigSum
                     omega[r1][r2] +=self.delta*bigSum
+
 
             last_magnitude = curr_magnitude
             curr_magnitude = np.sum(np.abs(omega))
+        return omega
 
-        self.omega = omega
 
     def training_log_likelihood(self):
         """
@@ -335,6 +335,11 @@ class IRLModel:
         based on the current parameters of the model
         """
         L = 0.0
+        nu_ctr = 0
+        sigma_ctr = 0
+        policy_ctr = 0
+        reward_ctr = 0
+        transition_ctr = 0
         for n, traj in enumerate(self.trajectories):
             #import pdb; pdb.set_trace()
             init_state_prob = np.log(self.nu[traj[1, 0]])
@@ -363,6 +368,13 @@ class IRLModel:
                 transition_prob += np.log(self.T[sprev, aprev, s])
             L += (init_state_prob + first_rew_prob + policy_prob +
                     reward_transition_prob + transition_prob)
+            nu_ctr += init_state_prob
+            sigma_ctr += first_rew_prob
+            policy_ctr += policy_prob
+            reward_ctr += reward_transition_prob
+            transition_ctr += transition_prob
+
+        print nu_ctr, sigma_ctr, policy_ctr, reward_ctr, transition_ctr
 
         return L
 
