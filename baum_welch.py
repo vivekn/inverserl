@@ -48,7 +48,7 @@ class BaumWelch(object):
             # for t = 1
             for r in xrange(model.nrewards):
                 for rprev in xrange(model.nrewards):
-                    self.alpha[n][(1, r)] += (model.sigma[traj[(1, 0)]] *
+                    self.alpha[n][(1, r)] += (model.nu[traj[(1, 0)]] *
                         model.tau[r, rprev, traj[(1, 0)]] *
                         model.policy[r, traj[(1, 0)], traj[(1, 1)]] *
                         self.alpha[n][(0, rprev)])
@@ -103,7 +103,7 @@ class BaumWelch(object):
             # for t = 0
             for r in xrange(model.nrewards):
                 for rnext in xrange(model.nrewards):
-                    self.beta[n][(0, r)] += (model.sigma[traj[(1, 0)]] *
+                    self.beta[n][(0, r)] += (model.nu[traj[(1, 0)]] *
                         model.tau[r, rnext, traj[(1, 0)]] *
                         model.policy[r, traj[(1, 0)], traj[(1, 1)]] *
                         self.beta[n][1, rnext])
@@ -134,6 +134,12 @@ class BaumWelch(object):
         a = traj[(time, 1)]
         aprev = traj[(time-1, 1)]
         model = self.model
+
+
+        if (model.policy[rtheta, s, a] < 1e-10 or
+            model.T[sprev, aprev, s] < 1e-10 or
+            model.tau[rthetaprev, rtheta, s] < 1e-10):
+            return 0.0
 
         return np.exp(np.log(self.alpha[seq][time-1, rthetaprev]) +
                 (self.logalpha[seq][time-1] if (time > 0) else 0) +

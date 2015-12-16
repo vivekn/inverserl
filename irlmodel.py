@@ -6,6 +6,16 @@ import time
 np.seterr(all='raise')
 
 
+def stable_boltzmann(beta, numerator, denominator):
+    """
+    Computes exp(beta * num) / sum_i exp(beta * den_i)
+    """
+    minx = min(numerator, denominator.min())
+    new_num = beta * (numerator - minx)
+    new_den = beta * (denominator - minx)
+    return np.exp(new_num) / np.sum(np.exp(new_den))
+
+
 class IRLModel:
     def __init__(self, nstates, nactions,
         nrewards, nfeatures, T, gamma, delta, state_features,
@@ -18,7 +28,7 @@ class IRLModel:
         self.Q = np.zeros([nrewards,nstates, nactions]) # Q-value function (NOT the EM Q fn)
         self.nrewards = nrewards
         self.gamma = gamma
-        self.boltzmann = 0.5
+        self.boltzmann = 0.05
         # Weights for the linear reward functions
         self.Theta = np.random.rand(nrewards, nfeatures)
         # Weights for the reward transition functions
@@ -29,11 +39,14 @@ class IRLModel:
         # function that returns features for a state
         self.delta = delta
 
-        self.tau = np.zeros((self.nrewards, self.nrewards, self.nstates))
+        self.tau = np.ones((self.nrewards, self.nrewards, self.nstates))
+        for r in xrange(self.nrewards):
+            for s in xrange(self.nstates):
+                self.tau[r, :, s] = np.ones(nrewards) / nrewards
 
         self.state_features = state_features
         self.dynamic_features = dynamic_features
-        if not dynamic_features.size==0:
+        if dynamic_features != None:
             self.ndynfeatures = dynamic_features.shape[1]
             self.omega = np.random.rand(nrewards, nrewards, self.ndynfeatures)
         else:
@@ -46,6 +59,24 @@ class IRLModel:
         for r in xrange(nrewards):
             self.policy[r], _ = self.gradient_pi(self.Theta[r])
 
+
+    def set_parameters(self, nu, T, sigma, theta, tau=None):
+        """
+        Sets true parameters of the model
+        (for trajectory generation)
+        """
+        self.nu = nu
+        self.T = T
+        self.sigma = sigma
+        self.Theta = theta
+        if tau != None:
+            self.tau = tau
+
+        for r in xrange(self.nrewards):
+            pi, _ = self.gradient_pi(self.Theta[r])
+            self.policy[r] = pi
+
+
     def learn(self, trajectories, tolerance, max_iters):
         """
         Learns parameters by using EM.
@@ -57,17 +88,14 @@ class IRLModel:
         self.BWLearn = BaumWelch(trajectories, self)
         self.max_iters = max_iters
         self.tolerance = tolerance
-        curr_likelihood = 0
-        last_likelihood = curr_likelihood - 1e9
         iter = 0
 
         self.nu = self.maximize_nu()
 
-        if self.ndynfeatures > 0:
-            self.precompute_tau_dynamic()
-        else:
-            self.precompute_tau_static()
 
+        self.BWLearn.update()
+        curr_likelihood = self.training_log_likelihood()
+        last_likelihood = curr_likelihood - 1e9
 
         while (iter < max_iters and
             (abs(curr_likelihood - last_likelihood) > tolerance)):
@@ -90,13 +118,12 @@ class IRLModel:
             # Set parameters
             self.sigma, self.Theta = sigma, Theta
             self.Theta = Theta
-            if not omega.size==0:
+            if omega != None:
                 self.omega = omega
             # Compute likelihoods
 
             last_likelihood = curr_likelihood
             curr_likelihood = self.training_log_likelihood()
-            print curr_likelihood
 
         print "EM done"
 
@@ -144,7 +171,8 @@ class IRLModel:
                             Tn = len(self.trajectories[n])
                             for t in xrange(1, Tn):
                                 denominator += self.BWLearn.ri_given_seq2(n, t, r1, r3)
-                    self.tau[r1, r2, s] = numerator / denominator
+                    if denominator > 0:
+                        self.tau[r1, r2, s] = numerator / denominator
 
 
 
@@ -175,16 +203,17 @@ class IRLModel:
             for n, traj in enumerate(self.trajectories):
                 probSum+=self.BWLearn.ri_given_seq(n,0,r)
 
-            sigma[r] = probSum/len(self.trajectories)
-            #print sigma[r]
+            sigma[r] = probSum
         S = np.sum(sigma)
+        print S, len(self.trajectories)
         return sigma / S
 
 
-    def maximize_reward_weights(self, max_iters=30, tolerance = 0.01):
+    def maximize_reward_weights(self, max_iters=100, tolerance = 0.01):
         """
         Find the optimal set of weights for the reward functions using gradient ascent
         """
+        print "begin theta GA"
         curr_magnitude = 0
         last_magnitude = 1e9
         iter = 0
@@ -209,12 +238,14 @@ class IRLModel:
                         gradTheta += prob * gradPi[s, a] / pi[s, a]
 
                 # Set parameters
+                #print gradTheta
                 Theta[r] = Theta[r] + self.delta * gradTheta
 
             # Compute magnitudes
             last_magnitude = curr_magnitude
             curr_magnitude = np.sum(np.abs(Theta))
         self.policy = policy
+        print "end theta GA"
         return Theta
 
 
@@ -232,43 +263,41 @@ class IRLModel:
         V = np.dot(self.state_features, theta_r)
         Q = np.tile(V.T, [self.nactions, 1]).T
         gradV = np.copy(self.state_features)
-        gradZ = np.zeros((self.nstates, self.nfeatures))
-        gradQ = np.zeros((self.nstates, self.nfeatures, self.nactions))
-        Z = np.zeros(self.nstates)
+        gradQ = np.zeros((self.nstates, self.nactions, self.nfeatures))
+
+        SB = lambda n, d: stable_boltzmann(self.boltzmann, n, d)
 
         for iter in xrange(iters):
             r_s = np.dot(self.state_features, theta_r)
             for s in xrange(self.nstates):
-                #print 'old', Q[s], r_s[s], V
+                #print 'old', s, Q[s], r_s[s], V
                 for a in xrange(self.nactions):
                     Q[s, a] = r_s[s] + self.gamma * np.dot(self.T[s, a], V).T
-                #print 'new', Q[s]
+                #print 'new', s, Q[s]
 
 
-           # #gradQ s*f*a tensor
             for s in xrange(self.nstates):
                 for a in xrange(self.nactions):
                     gradQ[s, a] = self.state_features[s] + self.gamma * np.dot(self.T[s, a], gradV)
 
-
             for s in xrange(self.nstates):
-                Z[s] = np.sum(np.exp(self.boltzmann * Q[s]))
-            for s in xrange(self.nstates):
-                gradZ[s] = self.boltzmann * np.dot(np.exp(self.boltzmann * Q[s]), gradQ[s])
-
-
-            for s in xrange(self.nstates):
-                pi[s] = np.exp(self.boltzmann * Q[s]) / Z[s]
+                for a in xrange(self.nactions):
+                    pi[s, a] = SB(Q[s, a], Q[s])
 
             for s in xrange(self.nstates):
                 for a in xrange(self.nactions):
-                    temp = np.exp(self.boltzmann*Q[s, a])
-                    gradPi[s, a] = (self.boltzmann * Z[s] * temp * gradQ[s, a] - temp * gradZ[s]) / (Z[s] ** 2)
+                    term1 = self.boltzmann * SB(Q[s, a], Q[s]) * gradQ[s, a]
+                    term3 = 0
+                    for a2 in xrange(self.nactions):
+                        term3 += SB(Q[s, a2], Q[s]) * gradQ[s, a2]
+                    term2 = self.boltzmann * SB(Q[s, a], Q[s]) * term3
+                    gradPi[s, a] = term1 - term2
 
             V = np.sum(pi*Q, 1)
 
             for s in xrange(self.nstates):
-                gradV[s] = np.dot(Q[s], gradPi[s, a]) + np.dot(pi[s], gradQ[s, a])
+                gradV[s] = np.dot(Q[s], gradPi[s]) + np.dot(pi[s], gradQ[s])
+
 
 
         return (pi, gradPi)
@@ -349,7 +378,7 @@ class IRLModel:
             first_rew_prob = 0.0
             for r in xrange(self.nrewards):
                 #import pdb; pdb.set_trace()
-                first_rew_prob += (self.BWLearn.ri_given_seq(n, 1, r) *
+                first_rew_prob += (self.BWLearn.ri_given_seq(n, 0, r) *
                     np.log(self.sigma[r]))
             policy_prob = 0.0
             for t in xrange(1, len(traj)):
@@ -378,6 +407,7 @@ class IRLModel:
             transition_ctr += transition_prob
 
         print nu_ctr, sigma_ctr, policy_ctr, reward_ctr, transition_ctr
+        print L
 
         return L
 
@@ -438,8 +468,7 @@ def test():
             T[i, j] = T[i, j] / s
     state_features = np.random.rand(2, 3)
     dynamic_features = np.random.rand(2, 4)
-    testModel = IRLModel(2, 3, 2, 3, T, 0.95, 0.01, state_features,
-        dynamic_features)
+    testModel = IRLModel(2, 3, 2, 3, T, 0.95, 0.01, state_features)
     trajectories = []
     for i in xrange(100):
         Tn = np.random.randint(5, 101)
@@ -450,6 +479,7 @@ def test():
         trajectories.append(traj)
     testModel.learn(trajectories, 1e-3, 10)
 
-test()
+if __name__ == "__main__":
+    test()
 
 
