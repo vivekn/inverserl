@@ -19,7 +19,7 @@ def stable_boltzmann(beta, numerator, denominator):
 class IRLModel:
     def __init__(self, nstates, nactions,
         nrewards, nfeatures, T, gamma, delta, state_features,
-        dynamic_features=None):
+        dynamic_features=None, ignore_tau=False):
 
         self.nstates = nstates
         self.nactions = nactions
@@ -38,7 +38,8 @@ class IRLModel:
         self.sigma = np.ones(nrewards) / nrewards
         # function that returns features for a state
         self.delta = delta
-        self.static_train = True
+        self.static_train = False
+        self.ignore_tau = ignore_tau
 
         self.tau = np.ones((self.nrewards, self.nrewards, self.nstates))
         for r in xrange(self.nrewards):
@@ -73,6 +74,7 @@ class IRLModel:
         self.Theta = theta
         if tau != None:
             self.tau = tau
+            self.static_train = True
             self.normalize_tau()
 
         for r in xrange(self.nrewards):
@@ -82,7 +84,7 @@ class IRLModel:
     def set_tau(self, tau):
         self.tau = tau
         self.normalize_tau()
-        self.static_train = False
+        self.static_train = True
 
     def test(self, test_traj):
         testBW = BaumWelch(test_traj, self)
@@ -165,11 +167,6 @@ class IRLModel:
         selftransition = np.exp(np.dot(
                 self.omega[rtheta1, rtheta1], state))
 
-        # print state
-        # print rtheta1, rtheta2
-
-        # print np.dot(self.omega[rtheta1, rtheta1], state)
-        # print selftransition
         den = (np.sum
                 (np.exp(np.dot(self.omega[rtheta1], state))) - selftransition) + 1
 
@@ -178,17 +175,19 @@ class IRLModel:
         return (num/den)[0]
 
     def precompute_tau_dynamic(self):
-
         if self.static_train:
-            for s in xrange(self.nstates):
-                for r1 in xrange(self.nrewards):
-                    for r2 in xrange(self.nrewards):
-                        self.tau[r1, r2, s] = self.tau_helper(r1, r2, s)
+            return
+        for s in xrange(self.nstates):
+            for r1 in xrange(self.nrewards):
+                for r2 in xrange(self.nrewards):
+                    self.tau[r1, r2, s] = self.tau_helper(r1, r2, s)
 
     def precompute_tau_static(self):
         """
         This is very slow, need to optimize it
         """
+        if self.static_train:
+            return
         for s in xrange(self.nstates):
             for r1 in xrange(self.nrewards):
                 for r2 in xrange(self.nrewards):
@@ -237,7 +236,6 @@ class IRLModel:
 
             sigma[r] = probSum
         S = np.sum(sigma)
-        print S, len(self.trajectories)
         return sigma / S
 
 
@@ -245,7 +243,6 @@ class IRLModel:
         """
         Find the optimal set of weights for the reward functions using gradient ascent
         """
-        print "begin theta GA"
         curr_magnitude = 0
         last_magnitude = 1e9
         iter = 0
@@ -270,14 +267,12 @@ class IRLModel:
                         gradTheta += prob * gradPi[s, a] / pi[s, a]
 
                 # Set parameters
-                #print gradTheta
                 Theta[r] = Theta[r] + self.delta * gradTheta
 
             # Compute magnitudes
             last_magnitude = curr_magnitude
             curr_magnitude = np.sum(np.abs(Theta))
         self.policy = policy
-        print "end theta GA"
         return Theta
 
 
@@ -302,10 +297,8 @@ class IRLModel:
         for iter in xrange(iters):
             r_s = np.dot(self.state_features, theta_r)
             for s in xrange(self.nstates):
-                #print 'old', s, Q[s], r_s[s], V
                 for a in xrange(self.nactions):
                     Q[s, a] = r_s[s] + self.gamma * np.dot(self.T[s, a], V).T
-                #print 'new', s, Q[s]
 
 
             for s in xrange(self.nstates):
@@ -438,7 +431,7 @@ class IRLModel:
             reward_ctr += reward_transition_prob
             transition_ctr += transition_prob
 
-        print nu_ctr, sigma_ctr, policy_ctr, reward_ctr, transition_ctr
+        #print nu_ctr, sigma_ctr, policy_ctr, reward_ctr, transition_ctr
         print L
 
         return L

@@ -51,7 +51,7 @@ class BaumWelch(object):
             for r in xrange(model.nrewards):
                 for rprev in xrange(model.nrewards):
                     self.alpha[n][(1, r)] += (model.nu[traj[(1, 0)]] *
-                        model.tau[r, rprev, traj[(1, 0)]] *
+                        self.tau(r, rprev, traj[(1, 0)]) *
                         model.policy[r, traj[(1, 0)], traj[(1, 1)]] *
                         self.alpha[n][(0, rprev)])
 
@@ -70,7 +70,7 @@ class BaumWelch(object):
                     for rprev in xrange(model.nrewards):
                         #print model.T[sprev, aprev, s],model.tau[r, rprev, s],model.policy[r, s, a] ,self.alpha[n][(t-1, rprev)]
                         self.alpha[n][(t, r)] += (
-                            model.tau[r, rprev, s] *
+                            self.tau(r, rprev, s) *
                             model.policy[r, s, a] *
                             self.alpha[n][(t-1, rprev)])
                 asum = np.sum(self.alpha[n][t])
@@ -95,7 +95,7 @@ class BaumWelch(object):
                 for r in xrange(model.nrewards):
                     for rnext in xrange(model.nrewards):
                         self.beta[n][(t, r)] += (
-                            model.tau[rnext, r, snext] *
+                            self.tau(rnext, r, snext) *
                             model.policy[rnext, snext, anext] *
                             self.beta[n][(t+1, rnext)])
                 bsum = np.sum(self.beta[n][t])
@@ -145,7 +145,7 @@ class BaumWelch(object):
             for r in xrange(model.nrewards):
                 for rprev in xrange(model.nrewards):
                     self.alpha[n][(1, r)] += (model.nu[traj[(1, 0)]] *
-                        model.tau[r, rprev, traj[(1, 0)]] *
+                        self.tau(r, rprev, traj[(1, 0)]) *
                         model.policy[r, traj[(1, 0)], traj[(1, 1)]] *
                         self.alpha[n][(0, rprev)])
 
@@ -164,7 +164,7 @@ class BaumWelch(object):
                     for rprev in xrange(model.nrewards):
                         #print model.T[sprev, aprev, s],model.tau[r, rprev, s],model.policy[r, s, a] ,self.alpha[n][(t-1, rprev)]
                         self.alpha[n][(t, r)] += (model.T[sprev, aprev, s] *
-                            model.tau[r, rprev, s] *
+                            self.tau(r, rprev, s) *
                             model.policy[r, s, a] *
                             self.alpha[n][(t-1, rprev)])
                 asum = np.sum(self.alpha[n][t])
@@ -189,7 +189,7 @@ class BaumWelch(object):
                 for r in xrange(model.nrewards):
                     for rnext in xrange(model.nrewards):
                         self.beta[n][(t, r)] += (model.T[s, a, snext] *
-                            model.tau[rnext, r, snext] *
+                            self.tau(rnext, r, snext) *
                             model.policy[rnext, snext, anext] *
                             self.beta[n][(t+1, rnext)])
                 bsum = np.sum(self.beta[n][t])
@@ -200,7 +200,7 @@ class BaumWelch(object):
             for r in xrange(model.nrewards):
                 for rnext in xrange(model.nrewards):
                     self.beta[n][(0, r)] += (model.nu[traj[(1, 0)]] *
-                        model.tau[r, rnext, traj[(1, 0)]] *
+                        self.tau(r, rnext, traj[(1, 0)]) *
                         model.policy[r, traj[(1, 0)], traj[(1, 1)]] *
                         self.beta[n][1, rnext])
             bsum = np.sum(self.beta[n][0])
@@ -234,7 +234,7 @@ class BaumWelch(object):
 
         if (model.policy[rtheta, s, a] < 1e-10 or
             model.T[sprev, aprev, s] < 1e-10 or
-            model.tau[rthetaprev, rtheta, s] < 1e-10):
+            self.tau(rthetaprev, rtheta, s) < 1e-10):
             return 0.0
 
         return np.exp(np.log(self.alpha[seq][time-1, rthetaprev]) +
@@ -242,9 +242,14 @@ class BaumWelch(object):
                 np.log(self.beta[seq][time, rtheta]) +
                 self.logbeta[seq][time] +
                 np.log(model.T[sprev, aprev, s]) +
-                np.log(model.tau[rthetaprev, rtheta, s]) +
+                np.log(self.tau(rthetaprev, rtheta, s)) +
                 np.log(model.policy[rtheta, s, a]) -
                 self.seq_probs[seq])
 
+    def tau(self, x, y, z):
+        if self.model.ignore_tau:
+            return 1.0
+        else:
+            return self.model.tau[x, y, z]
 
 
