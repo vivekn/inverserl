@@ -141,7 +141,6 @@ class IRLModel:
 
             # Set parameters
             self.sigma, self.Theta = sigma, Theta
-            self.Theta = Theta
             if omega != None:
                 self.omega = omega
             # Compute likelihoods

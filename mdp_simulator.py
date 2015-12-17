@@ -116,15 +116,21 @@ def worldA():
         tau[1][0][i] = tau[1][1][i] = 0.5
 
     simA = Simulator(modelA, nu, T, sigma, Theta, tau=tau)
-    trajectories = simA.trajectories(150, 2*5+4, 20)
+    trajectories = simA.trajectories(1000, 2*5+4, 20)
     trajectories_test = simA.trajectories(4, 2*5+4, 20)
-    modelA_IRL.learn(trajectories, 1e-3, 5)
+    modelA_IRL.learn(trajectories, 1e-3, 3)
+    print "Us"
+    modelA_IRL.ignore_tau = True
     modelA_IRL.test(trajectories_test)
-    print "MLIRL"
-    modelA_EM.learn(trajectories, 1e-3, 5)
+    print modelA_IRL.Theta
+    modelA_EM.learn(trajectories, 1e-3, 3)
+    print "Littman"
     modelA_EM.test(trajectories_test)
+    print modelA_EM.Theta
     print "Expert"
     modelA.test(trajectories_test)
+    print modelA.Theta
+
 
 def worldB():
     T = getT()
@@ -165,14 +171,21 @@ def worldB():
     simB = Simulator(modelB, nu, T, sigma, Theta, omega=omega)
     trajectories = simB.trajectories(50, 2*5+4, 20)
     trajectories_test = simB.trajectories(4, 2*5+4, 20)
-    modelB_IRL.learn(trajectories, 1e-3, 10)
-
+    modelB_IRL.learn(trajectories, 1e-3, 3)
+    print "Us"
+    modelA_IRL.ignore_tau = True
     modelB_IRL.test(trajectories_test)
-    print "MLIRL"
-    modelB_EM.learn(trajectories, 1e-3, 5)
+    print modelB_IRL.Theta
+    print modelB_IRL.omega
+    modelB_EM.learn(trajectories, 1e-3, 3)
+    print "Littman"
     modelB_EM.test(trajectories_test)
+    print modelB_EM.Theta
     print "Expert"
     modelB.test(trajectories_test)
+    print modelB.Theta
+    print modelB.omega
+    
 
 
 
