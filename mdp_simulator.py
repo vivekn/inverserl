@@ -155,7 +155,7 @@ def worldB():
 
     nu = np.zeros(25)
     nu[5*2+0] = 1.0
-    sigma = np.array([1, 1])
+    sigma = np.array([0.0, 1.0])
     Theta = np.array([[30,0],
                       [0, 30]])
     omega = np.zeros([2,2,2])
@@ -164,6 +164,7 @@ def worldB():
 
     simB = Simulator(modelB, nu, T, sigma, Theta, omega=omega)
     trajectories = simB.trajectories(50, 2*5+4, 20)
+    trajectories_test = simB.trajectories(4, 2*5+4, 20)
     modelB_IRL.learn(trajectories, 1e-3, 10)
 
     modelB_IRL.test(trajectories_test)
@@ -177,5 +178,3 @@ def worldB():
 
 worldB()
 #worldA()
-
-
