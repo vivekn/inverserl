@@ -143,12 +143,20 @@ class IRLModel:
 
         selftransition = np.exp(np.dot(
                 self.omega[rtheta1, rtheta1], state))
+
+        # print state
+        # print rtheta1, rtheta2
+
+        # print np.dot(self.omega[rtheta1, rtheta1], state)
+        # print selftransition
         den = (np.sum
                 (np.exp(np.dot(self.omega[rtheta1], state))) - selftransition) + 1
 
-        return num / den
+        # print num/den
 
-    def precompute_tau_dynamic(self,dynamic_features):
+        return (num/den)[0]
+
+    def precompute_tau_dynamic(self):
 
         for s in xrange(self.nstates):
             for r1 in xrange(self.nrewards):
@@ -252,7 +260,7 @@ class IRLModel:
 
 
 
-    def gradient_pi(self, theta_r, iters=25):
+    def gradient_pi(self, theta_r, iters=5):
         """
         Returns pi(s, a) matrix for reward function rtheta.
         Also returns the gradient of pi, uses a Q learning like

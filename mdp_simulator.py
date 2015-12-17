@@ -115,28 +115,28 @@ def worldB():
             state_features[5*x + y] = np.array([0,0])
             dynamic_features[5*x+ y] = np.array([0,1])
 
-    state_features[4][0] = np.array([0,1])
-    state_features[0][4] = np.array([1,0])
+    state_features[5*4+0] = np.array([0,1])
+    state_features[5*0+4] = np.array([1,0])
 
-    dynamic_features[2][0] = np.array([1,1])
-    dynamic_features[2][1] = np.array([1,1])
-    dynamic_features[2][2] = np.array([1,1])
-    dynamic_features[3][2] = np.array([1,1])
-    dynamic_features[3][2] = np.array([1,1])
+    dynamic_features[5*2+0] = np.array([1,1])
+    dynamic_features[5*2+1] = np.array([1,1])
+    dynamic_features[5*2+2] = np.array([1,1])
+    dynamic_features[5*3+2] = np.array([1,1])
+    dynamic_features[5*4+2] = np.array([1,1])
 
 
 
-    modelB = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features, dynamic_features=dynamic_features)
-    modelB_IRL = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features,dynamic_features=dynamic_features)
+    modelB = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features, dynamic_features=dynamic_features)
+    modelB_IRL = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features,dynamic_features=dynamic_features)
 
     nu = np.zeros(25)
     nu[5*2+0] = 1.0
     sigma = np.array([0.5, 0.5])
     Theta = np.array([[30,0],
                       [0, 30]])
-    omega = np.array([[-11.12],[13,-12]])
+    omega = np.array([[-11,12],[13,-12]])
 
-    simB = Simulator(modelA, nu, T, sigma, Theta, omega=omega)
+    simB = Simulator(modelB, nu, T, sigma, Theta, omega=omega)
     trajectories = simB.trajectories(50, 2*5+4, 60)
     modelB_IRL.learn(trajectories, 1e-3, 10)
 
@@ -145,7 +145,7 @@ def worldB():
 
 
 
-worldA()
+#worldA()
 worldB()
 
 
