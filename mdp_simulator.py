@@ -43,7 +43,6 @@ class Simulator:
             all.append(np.array(traj))
         return all
 
-
 def getT():
     """
     State mapping (x, y) -> 5 * x + y
@@ -70,6 +69,18 @@ def getT():
                         T[i][a][i] += 0.85 if a == b else 0.05
     return T
 
+def tau_EM():
+    """
+    MLIRL - Littman's paper - Benchmark
+    """
+    tau = np.zeros((2, 2, 25))
+
+    for r1 in xrange(2):
+        for s in xrange(25):
+            tau[r1][r1][s] = 1.0
+    return tau
+
+
 def worldA():
     T = getT()
     state_features = np.zeros((25, 3))
@@ -83,8 +94,11 @@ def worldA():
                 state_features[5*x+y] = np.array([1,0,0])
     state_features[5*2+2] = np.array([0,0,0])
     state_features[5*2+4] = np.array([1,0,1])
+
     modelA = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features)
     modelA_IRL = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features)
+    modelA_EM = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features)
+    modelA_EM.set_tau(tau_EM())
 
     nu = np.zeros(25)
     nu[5*2+0] = 1.0
@@ -102,8 +116,15 @@ def worldA():
         tau[1][0][i] = tau[1][1][i] = 0.5
 
     simA = Simulator(modelA, nu, T, sigma, Theta, tau=tau)
-    trajectories = simA.trajectories(50, 2*5+4, 60)
-    modelA_IRL.learn(trajectories, 1e-3, 10)
+    trajectories = simA.trajectories(50, 2*5+4, 20)
+    trajectories_test = simA.trajectories(4, 2*5+4, 20)
+    modelA_IRL.learn(trajectories, 1e-3, 5)
+    modelA_IRL.test(trajectories_test)
+    print "MLIRL"
+    modelA_EM.learn(trajectories, 1e-3, 5)
+    modelA_EM.test(trajectories_test)
+    print "Expert"
+    modelA.test(trajectories_test)
 
 def worldB():
     T = getT()
@@ -125,9 +146,11 @@ def worldB():
     dynamic_features[5*4+2] = np.array([1,1])
 
 
+    modelB = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features, dynamic_features=dynamic_features)
+    modelB_IRL = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features,dynamic_features=dynamic_features)
+    modelB_EM = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features)
+    modelB_EM.set_tau(tau_EM())
 
-    modelB = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features, dynamic_features=dynamic_features)
-    modelB_IRL = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features,dynamic_features=dynamic_features)
 
     nu = np.zeros(25)
     nu[5*2+0] = 1.0
@@ -140,16 +163,18 @@ def worldB():
     trajectories = simB.trajectories(50, 2*5+4, 60)
     modelB_IRL.learn(trajectories, 1e-3, 10)
 
+    modelB_IRL.test(trajectories_test)
+    print "MLIRL"
+    modelB_EM.learn(trajectories, 1e-3, 5)
+    modelB_EM.test(trajectories_test)
+    print "Expert"
+    modelB.test(trajectories_test)
 
 
 
 
 
-#worldA()
 worldB()
-
-
-
-
+worldA()
 
 
