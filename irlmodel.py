@@ -179,7 +179,7 @@ class IRLModel:
             for r1 in xrange(self.nrewards):
                 for r2 in xrange(self.nrewards):
                     self.tau[r1, r2, s] = self.tau_helper(r1, r2, s)
-        self.normalize_tau()
+        #self.normalize_tau()
 
 
     def precompute_tau_static(self):
