@@ -155,7 +155,7 @@ def worldB():
 
     nu = np.zeros(25)
     nu[5*2+0] = 1.0
-    sigma = np.array([1, 1])
+    sigma = np.array([0,1])
     Theta = np.array([[30,0],
                       [0, 30]])
     omega = np.zeros([2,2,2])
