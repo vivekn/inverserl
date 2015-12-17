@@ -95,9 +95,9 @@ def worldA():
     state_features[5*2+2] = np.array([0,0,0])
     state_features[5*2+4] = np.array([1,0,1])
 
-    modelA = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features)
+    modelA = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features, ignore_tau=True)
     modelA_IRL = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features)
-    modelA_EM = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features)
+    modelA_EM = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features, ignore_tau=True)
     modelA_EM.set_tau(tau_EM())
 
     nu = np.zeros(25)
@@ -116,7 +116,7 @@ def worldA():
         tau[1][0][i] = tau[1][1][i] = 0.5
 
     simA = Simulator(modelA, nu, T, sigma, Theta, tau=tau)
-    trajectories = simA.trajectories(50, 2*5+4, 20)
+    trajectories = simA.trajectories(150, 2*5+4, 20)
     trajectories_test = simA.trajectories(4, 2*5+4, 20)
     modelA_IRL.learn(trajectories, 1e-3, 5)
     modelA_IRL.test(trajectories_test)
@@ -148,7 +148,8 @@ def worldB():
 
     modelB = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features, dynamic_features=dynamic_features)
     modelB_IRL = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features,dynamic_features=dynamic_features)
-    modelB_EM = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features)
+    modelB_EM = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features,ignore_tau=True)
+
     modelB_EM.set_tau(tau_EM())
 
 
@@ -171,8 +172,6 @@ def worldB():
     modelB_EM.test(trajectories_test)
     print "Expert"
     modelB.test(trajectories_test)
-
-
 
 
 
