@@ -38,6 +38,7 @@ class IRLModel:
         self.sigma = np.ones(nrewards) / nrewards
         # function that returns features for a state
         self.delta = delta
+        self.static_train = True
 
         self.tau = np.ones((self.nrewards, self.nrewards, self.nstates))
         for r in xrange(self.nrewards):
@@ -72,11 +73,31 @@ class IRLModel:
         self.Theta = theta
         if tau != None:
             self.tau = tau
+            self.normalize_tau()
 
         for r in xrange(self.nrewards):
             pi, _ = self.gradient_pi(self.Theta[r])
             self.policy[r] = pi
 
+    def set_tau(self, tau):
+        self.tau = tau
+        self.normalize_tau()
+        self.static_train = False
+
+    def test(self, test_traj):
+        testBW = BaumWelch(test_traj, self)
+        testBW.update()
+        print np.mean(testBW.seq_probs)
+
+    def normalize_tau(self):
+        """
+        Make transitions smooth
+        """
+        eps = 1e-6
+        for r in xrange(self.nrewards):
+            for s in xrange(self.nstates):
+                self.tau[r, :, s] += eps
+                self.tau[r, :, s] /= np.sum(self.tau[r, :, s])
 
     def learn(self, trajectories, tolerance, max_iters):
         """
@@ -148,12 +169,12 @@ class IRLModel:
 
         return num / den
 
-    def precompute_tau_dynamic(self,dynamic_features):
-
-        for s in xrange(self.nstates):
-            for r1 in xrange(self.nrewards):
-                for r2 in xrange(self.nrewards):
-                    self.tau[r1, r2, s] = self.tau_helper(r1, r2, s)
+    def precompute_tau_dynamic(self):
+        if self.static_train:
+            for s in xrange(self.nstates):
+                for r1 in xrange(self.nrewards):
+                    for r2 in xrange(self.nrewards):
+                        self.tau[r1, r2, s] = self.tau_helper(r1, r2, s)
 
     def precompute_tau_static(self):
         """

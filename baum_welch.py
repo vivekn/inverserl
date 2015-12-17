@@ -19,6 +19,102 @@ class BaumWelch(object):
         self.logbeta = [np.zeros(traj.shape[0]) for traj in trajectories]
         self.seq_probs = np.zeros(len(trajectories))
 
+    def update_test(self):
+        """
+        Computes forward and backward probabilities
+        for each trajectory using the current model parameters.
+
+        HACK - This is bad but saves time
+        """
+        model = self.model
+
+        ntraj = len(self.alpha)
+
+
+        for n in xrange(ntraj):
+            traj = self.trajectories[n]
+
+
+            # alpha recursion
+
+            for r in xrange(model.nrewards):
+                self.alpha[n][(0, r)] = model.sigma[r]
+
+            asum = np.sum(self.alpha[n][0])
+            self.logalpha[n][0] = np.log(asum)
+            self.alpha[n][0] /= asum
+
+
+            tmax = self.alpha[n].shape[0]
+
+            # for t = 1
+            for r in xrange(model.nrewards):
+                for rprev in xrange(model.nrewards):
+                    self.alpha[n][(1, r)] += (model.nu[traj[(1, 0)]] *
+                        model.tau[r, rprev, traj[(1, 0)]] *
+                        model.policy[r, traj[(1, 0)], traj[(1, 1)]] *
+                        self.alpha[n][(0, rprev)])
+
+            asum = np.sum(self.alpha[n][1])
+            self.logalpha[n][1] = np.log(asum) + self.logalpha[n][0]
+            self.alpha[n][1] /= asum
+
+
+            # for t = 2 to n
+            for t in xrange(2, tmax):
+                s = traj[(t, 0)]
+                sprev = traj[(t-1, 0)]
+                a = traj[(t, 1)]
+                aprev = traj[(t-1, 1)]
+                for r in xrange(model.nrewards):
+                    for rprev in xrange(model.nrewards):
+                        #print model.T[sprev, aprev, s],model.tau[r, rprev, s],model.policy[r, s, a] ,self.alpha[n][(t-1, rprev)]
+                        self.alpha[n][(t, r)] += (
+                            model.tau[r, rprev, s] *
+                            model.policy[r, s, a] *
+                            self.alpha[n][(t-1, rprev)])
+                asum = np.sum(self.alpha[n][t])
+                self.logalpha[n][t] = np.log(asum) + self.logalpha[n][t-1]
+                self.alpha[n][t] /= asum
+
+
+            # self.beta recursion
+            for r in xrange(model.nrewards):
+                self.beta[n][(tmax-1, r)] = 1
+
+            bsum = np.sum(self.beta[n][tmax-1])
+            self.logbeta[n][tmax-1] = np.log(bsum)
+            self.beta[n][tmax-1] /= bsum
+
+            # for t = n-2 to 1
+            for t in xrange(tmax-2, 0, -1):
+                s = traj[(t, 0)]
+                snext = traj[(t+1, 0)]
+                a = traj[(t, 1)]
+                anext = traj[(t+1, 1)]
+                for r in xrange(model.nrewards):
+                    for rnext in xrange(model.nrewards):
+                        self.beta[n][(t, r)] += (
+                            model.tau[rnext, r, snext] *
+                            model.policy[rnext, snext, anext] *
+                            self.beta[n][(t+1, rnext)])
+                bsum = np.sum(self.beta[n][t])
+                self.logbeta[n][t] = np.log(bsum) + self.logbeta[n][t+1]
+                self.beta[n][t] /= bsum
+
+            # for t = 0
+            for r in xrange(model.nrewards):
+                for rnext in xrange(model.nrewards):
+                    self.beta[n][(0, r)] += (model.nu[traj[(1, 0)]] *
+                        model.tau[r, rnext, traj[(1, 0)]] *
+                        model.policy[r, traj[(1, 0)], traj[(1, 1)]] *
+                        self.beta[n][1, rnext])
+            bsum = np.sum(self.beta[n][0])
+            self.logbeta[n][0] = np.log(bsum) + self.logbeta[n][1]
+            self.beta[n][0] /= bsum
+
+            # Compute sequence probabilities
+            self.seq_probs[n] = np.log(np.sum(self.alpha[n][tmax-1, :])) + self.logalpha[n][tmax-1]
     def update(self):
         """
         Computes forward and backward probabilities
