@@ -165,17 +165,10 @@ class IRLModel:
         selftransition = np.exp(np.dot(
                 self.omega[rtheta1, rtheta1], state))
 
-        # print state
-        # print rtheta1, rtheta2
-
-        # print np.dot(self.omega[rtheta1, rtheta1], state)
-        # print selftransition
         den = (np.sum
                 (np.exp(np.dot(self.omega[rtheta1], state))) - selftransition) + 1
 
-        # print num/den
-
-        return (num/den)[0]
+        return (num/den)
 
     def precompute_tau_dynamic(self):
 
@@ -184,6 +177,7 @@ class IRLModel:
                 for r1 in xrange(self.nrewards):
                     for r2 in xrange(self.nrewards):
                         self.tau[r1, r2, s] = self.tau_helper(r1, r2, s)
+        self.normalize_tau()
 
     def precompute_tau_static(self):
         """

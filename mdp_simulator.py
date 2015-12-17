@@ -146,9 +146,9 @@ def worldB():
     dynamic_features[5*4+2] = np.array([1,1])
 
 
-    modelB = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features, dynamic_features=dynamic_features)
-    modelB_IRL = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features,dynamic_features=dynamic_features)
-    modelB_EM = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features)
+    modelB = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features, dynamic_features=dynamic_features)
+    modelB_IRL = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features,dynamic_features=dynamic_features)
+    modelB_EM = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features)
     modelB_EM.set_tau(tau_EM())
 
 
@@ -157,7 +157,9 @@ def worldB():
     sigma = np.array([0.5, 0.5])
     Theta = np.array([[30,0],
                       [0, 30]])
-    omega = np.array([[-11,12],[13,-12]])
+    omega = np.zeros([2,2,2])
+    omega[0,0] = np.array([-11,12])
+    omega[1,0] = np.array([13,-12])
 
     simB = Simulator(modelB, nu, T, sigma, Theta, omega=omega)
     trajectories = simB.trajectories(50, 2*5+4, 60)
@@ -175,6 +177,6 @@ def worldB():
 
 
 worldB()
-worldA()
+#worldA()
 
 
