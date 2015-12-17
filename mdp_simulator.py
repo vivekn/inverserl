@@ -8,10 +8,10 @@ class Simulator:
     def __init__(self, model, nu, T, sigma, theta, omega=None, tau=None):
         self.model = model
         if omega != None:
-            self.model.set_parameters(nu, T, sigma, theta)
+            self.model.set_parameters(nu, T, sigma, theta, omega=omega)
             self.model.precompute_tau_dynamic()
         elif tau != None:
-            self.model.set_parameters(nu, T, sigma, theta, tau)
+            self.model.set_parameters(nu, T, sigma, theta, tau=tau)
         else:
             assert False, "Invalid arguments"
 

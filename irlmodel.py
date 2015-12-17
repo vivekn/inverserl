@@ -60,7 +60,7 @@ class IRLModel:
             self.policy[r], _ = self.gradient_pi(self.Theta[r])
 
 
-    def set_parameters(self, nu, T, sigma, theta, tau=None):
+    def set_parameters(self, nu, T, sigma, theta, omega=None,tau=None):
         """
         Sets true parameters of the model
         (for trajectory generation)
@@ -68,6 +68,7 @@ class IRLModel:
         self.nu = nu
         self.T = T
         self.sigma = sigma
+        self.omega = omega
         self.Theta = theta
         if tau != None:
             self.tau = tau
@@ -147,7 +148,8 @@ class IRLModel:
 
         return num / den
 
-    def precompute_tau_dynamic(self):
+    def precompute_tau_dynamic(self,dynamic_features):
+
         for s in xrange(self.nstates):
             for r1 in xrange(self.nrewards):
                 for r2 in xrange(self.nrewards):
