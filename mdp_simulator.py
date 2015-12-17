@@ -173,7 +173,7 @@ def worldB():
     trajectories_test = simB.trajectories(4, 2*5+4, 20)
     modelB_IRL.learn(trajectories, 1e-3, 3)
     print "Us"
-    modelA_IRL.ignore_tau = True
+    modelB_IRL.ignore_tau = True
     modelB_IRL.test(trajectories_test)
     print modelB_IRL.Theta
     print modelB_IRL.omega
