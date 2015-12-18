@@ -26,7 +26,7 @@ class Simulator:
         next_reward = sample(model.tau[reward, :, next_state])
         return (next_state, action, next_reward)
 
-    def trajectories(self, N, goal_state, tmax):
+    def trajectories(self, N, tmax):
         all = []
         model = self.model
         for i in xrange(N):
@@ -35,7 +35,7 @@ class Simulator:
             state = sample(model.nu)
             reward = sample(model.tau[reward, :, state])
 
-            while state != goal_state and len(traj) < tmax:
+            while len(traj) < tmax:
                 next_state, action, next_reward = self.next(state, reward)
                 traj.append((state, action))
                 state, reward = next_state, next_reward
@@ -71,7 +71,7 @@ def getT():
 
 def tau_EM():
     """
-    MLIRL - Littman's paper - Benchmark
+    MLIRL - MLIRL's paper - Benchmark
     """
     tau = np.zeros((2, 2, 25))
 
@@ -95,9 +95,9 @@ def worldA():
     state_features[5*2+2] = np.array([0,0,0])
     state_features[5*2+4] = np.array([1,0,1])
 
-    modelA = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features, ignore_tau=True)
-    modelA_IRL = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features)
-    modelA_EM = IRLModel(25, 4, 2, 3, T, 0.95, 0.1, state_features, ignore_tau=True)
+    modelA = IRLModel(25, 4, 2, 3, T, 0.95, 0.01, state_features)
+    modelA_IRL = IRLModel(25, 4, 2, 3, T, 0.95, 0.01, state_features)
+    modelA_EM = IRLModel(25, 4, 2, 3, T, 0.95, 0.01, state_features, ignore_tau=True)
     modelA_EM.set_tau(tau_EM())
 
     nu = np.zeros(25)
@@ -116,20 +116,27 @@ def worldA():
         tau[1][0][i] = tau[1][1][i] = 0.5
 
     simA = Simulator(modelA, nu, T, sigma, Theta, tau=tau)
-    trajectories = simA.trajectories(1000, 2*5+4, 20)
-    trajectories_test = simA.trajectories(4, 2*5+4, 20)
-    modelA_IRL.learn(trajectories, 1e-3, 3)
-    print "Us"
-    modelA_IRL.ignore_tau = True
-    modelA_IRL.test(trajectories_test)
-    print modelA_IRL.Theta
-    modelA_EM.learn(trajectories, 1e-3, 3)
-    print "Littman"
-    modelA_EM.test(trajectories_test)
-    print modelA_EM.Theta
-    print "Expert"
-    modelA.test(trajectories_test)
-    print modelA.Theta
+    trajectories = simA.trajectories(125, 20)
+    trajectories_test = simA.trajectories(40, 20)
+
+    irl, mlirl, expert = [], [], []
+
+    for batch in xrange(1,6):
+        modelA_IRL = IRLModel(25, 4, 2, 3, T, 0.95, 0.01, state_features)
+        modelA_EM = IRLModel(25, 4, 2, 3, T, 0.95, 0.01, state_features, ignore_tau=True)
+        modelA_EM.set_tau(tau_EM())
+
+        modelA_IRL.learn(trajectories[:batch*25], 1e-3, 7)
+        print "Us"
+        irl.append(modelA_IRL.test(trajectories_test))
+
+        print "MLIRL"
+        modelA_EM.learn(trajectories[:batch*25], 1e-3, 7)
+        mlirl.append(modelA_EM.test(trajectories_test))
+
+        print "Expert"
+        expert.append(modelA.test(trajectories_test))
+        print irl, mlirl, expert
 
 
 def worldB():
@@ -154,7 +161,7 @@ def worldB():
 
     modelB = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features, dynamic_features=dynamic_features)
     modelB_IRL = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features,dynamic_features=dynamic_features)
-    modelB_EM = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features,ignore_tau=True)
+    modelB_EM = IRLModel(25, 4, 2, 2, T, 0.95, 0.1, state_features)
 
     modelB_EM.set_tau(tau_EM())
 
@@ -169,25 +176,31 @@ def worldB():
     omega[1,0] = np.array([13,-12])
 
     simB = Simulator(modelB, nu, T, sigma, Theta, omega=omega)
-    trajectories = simB.trajectories(50, 2*5+4, 20)
-    trajectories_test = simB.trajectories(4, 2*5+4, 20)
-    modelB_IRL.learn(trajectories, 1e-3, 3)
-    print "Us"
-    modelB_IRL.ignore_tau = True
-    modelB_IRL.test(trajectories_test)
-    print modelB_IRL.Theta
-    print modelB_IRL.omega
-    modelB_EM.learn(trajectories, 1e-3, 3)
-    print "Littman"
-    modelB_EM.test(trajectories_test)
-    print modelB_EM.Theta
-    print "Expert"
-    modelB.test(trajectories_test)
-    print modelB.Theta
-    print modelB.omega
-    
+    trajectories = simB.trajectories(125, 20)
+    trajectories_test = simB.trajectories(40, 20)
+
+    irl, mlirl, expert = [], [], []
+
+    for batch in xrange(1,6):
+        modelB_IRL = IRLModel(25, 4, 2, 2, T, 0.95, 0.01, state_features,dynamic_features=dynamic_features)
+        modelB_EM = IRLModel(25, 4, 2, 2, T, 0.95, 0.01, state_features,ignore_tau=True)
+
+        modelB_EM.set_tau(tau_EM())
+
+        modelB_IRL.learn(trajectories[:125], 1e-3, 7)
+        irl.append(modelB_IRL.test(trajectories_test))
+
+        modelB_EM.learn(trajectories[:batch*25], 1e-3, 7)
+        mlirl.append(modelB_EM.test(trajectories_test))
+
+        expert.append(modelB.test(trajectories_test))
+        print irl, mlirl, expert
 
 
 
-worldB()
-#worldA()
+import sys
+print sys.argv
+if len(sys.argv) > 1 and sys.argv[1] == 'A':
+    worldA()
+else:
+    worldB()

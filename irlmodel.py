@@ -28,9 +28,9 @@ class IRLModel:
         self.Q = np.zeros([nrewards,nstates, nactions]) # Q-value function (NOT the EM Q fn)
         self.nrewards = nrewards
         self.gamma = gamma
-        self.boltzmann = 0.05
+        self.boltzmann = 0.25
         # Weights for the linear reward functions
-        self.Theta = np.random.rand(nrewards, nfeatures)
+        self.Theta = np.random.rand(nrewards, nfeatures) - 0.5
         # Weights for the reward transition functions
         # Probabilities for the initial state distribution
         self.nu = np.ones(nstates) / nstates
@@ -41,20 +41,18 @@ class IRLModel:
         self.static_train = False
         self.ignore_tau = ignore_tau
 
-        self.tau = np.ones((self.nrewards, self.nrewards, self.nstates))
+        self.tau = np.random.rand(self.nrewards, self.nrewards, self.nstates)
         for r in xrange(self.nrewards):
             for s in xrange(self.nstates):
-                self.tau[r, :, s] = np.ones(nrewards) / nrewards
+                self.tau[r, :, s] /= np.sum(self.tau[r, :, s])
 
         self.state_features = state_features
         self.dynamic_features = dynamic_features
         if dynamic_features != None:
             self.ndynfeatures = dynamic_features.shape[1]
-            self.omega = np.random.rand(nrewards, nrewards, self.ndynfeatures)
+            self.omega = np.random.rand(nrewards, nrewards, self.ndynfeatures) - 0.5
         else:
             self.ndynfeatures = 0
-
-        self.initial_state_prob =  collections.defaultdict(int)
 
         #Initialize policy
         self.policy = np.zeros((nrewards, nstates, nactions))
@@ -70,7 +68,8 @@ class IRLModel:
         self.nu = nu
         self.T = T
         self.sigma = sigma
-        self.omega = omega
+        if omega != None:
+            self.omega = omega
         self.Theta = theta
         if tau != None:
             self.tau = tau
@@ -89,13 +88,15 @@ class IRLModel:
     def test(self, test_traj):
         testBW = BaumWelch(test_traj, self)
         testBW.update()
-        print np.mean(testBW.seq_probs)
+        k =  np.mean(testBW.seq_probs)
+        print k
+        return k
 
     def normalize_tau(self):
         """
         Make transitions smooth
         """
-        eps = 1e-6
+        eps = 1e-8
         for r in xrange(self.nrewards):
             for s in xrange(self.nstates):
                 self.tau[r, :, s] += eps
@@ -238,7 +239,7 @@ class IRLModel:
         return sigma / S
 
 
-    def maximize_reward_weights(self, max_iters=100, tolerance = 0.01):
+    def maximize_reward_weights(self, max_iters=20, tolerance = 0.01):
         """
         Find the optimal set of weights for the reward functions using gradient ascent
         """
@@ -276,7 +277,7 @@ class IRLModel:
 
 
 
-    def gradient_pi(self, theta_r, iters=5):
+    def gradient_pi(self, theta_r, iters=20):
         """
         Returns pi(s, a) matrix for reward function rtheta.
         Also returns the gradient of pi, uses a Q learning like
@@ -346,7 +347,7 @@ class IRLModel:
         return gradTau
 
 
-    def maximize_reward_transitions(self, delta=1e-6, max_iters=5, tolerance = 0.01):
+    def maximize_reward_transitions(self, delta=1e-5, max_iters=20, tolerance = 0.01):
         """
         TODO: Find the optimal set of weights for the reward transitions
         @ Daniel
@@ -410,12 +411,13 @@ class IRLModel:
                     policy_prob += (self.BWLearn.ri_given_seq(n, t, r) *
                         np.log(self.policy[r, traj[t, 0], traj[t, 1]]))
             reward_transition_prob = 0.0
-            for t in xrange(2, len(traj)):
-                state = traj[t-1, 0]
-                for rprev in xrange(self.nrewards):
-                    for r in xrange(self.nrewards):
-                        reward_transition_prob += (self.BWLearn.ri_given_seq2(
-                            n, t, rprev, r) * np.log(self.tau[rprev, r, state]))
+            if not self.ignore_tau:
+                for t in xrange(2, len(traj)):
+                    state = traj[t-1, 0]
+                    for rprev in xrange(self.nrewards):
+                        for r in xrange(self.nrewards):
+                            reward_transition_prob += (self.BWLearn.ri_given_seq2(
+                                n, t, rprev, r) * np.log(self.tau[rprev, r, state]))
             transition_prob = 0.0
             for t in xrange(2, len(traj)):
                 sprev = traj[t-1, 0]
@@ -430,7 +432,7 @@ class IRLModel:
             reward_ctr += reward_transition_prob
             transition_ctr += transition_prob
 
-        #print nu_ctr, sigma_ctr, policy_ctr, reward_ctr, transition_ctr
+        print nu_ctr, sigma_ctr, policy_ctr, reward_ctr, transition_ctr
         print L
 
         return L
